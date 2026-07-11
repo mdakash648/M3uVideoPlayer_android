@@ -1,0 +1,14 @@
+[UI/UX UPDATE] Optimize Horizontal Margins for Playlist Screen Rows
+
+1. TARGET VIEW
+   └── SCREEN : Playlist Screen (RecyclerView / GridView Layout).
+
+2. DESIGN REFACTOR
+   ├── CURRENT ISSUE : The items/rows in the playlist are too close to the screen edges, causing content to look cramped and cut off on certain TV displays (overscan issues).
+   │
+   └── REQUIREMENT : Increase the Left and Right side margins/padding for each playlist item row.
+       ├── MOBILE CONFIG : Set horizontal padding to 16dp to 20dp for clean side spacing.
+       └── TV CONFIG     : Set horizontal padding to 48dp to 56dp (standard Android TV leanback spec) to keep content safely away from the physical screen borders.
+
+3. EXPECTED OUTCOME
+   └── A visually balanced, breathable, and scannable list layout that scales properly on both smartphone screens and large television panels.

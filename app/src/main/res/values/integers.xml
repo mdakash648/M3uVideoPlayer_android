@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Number of columns for the responsive folder/channel grids.
+        Default (phones / small screens): 3 columns.
+        Overridden to 4 in values-sw600dp for tablets / TV / large screens.
+    -->
+    <integer name="grid_span_count">3</integer>
+</resources>

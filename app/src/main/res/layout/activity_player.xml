@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Player screen.
+    Step 9.1  — VLCVideoLayout hosts the LibVLC output; spinner + error text for load/error states.
+    Step 10.1 — controlsOverlay: top bar (back, title, audio-mode) + centered play/pause +
+                bottom bar (elapsed, seekbar, duration, boost, fullscreen). Auto-hides.
+    Step 10.2/10.3 — gestureIndicator: transient pill showing brightness / volume / seek deltas.
+    Step 10.4 — btnLock floats on top of everything; when locked, the whole controlsOverlay AND
+                btnLock itself are hidden ("fresh screen") — a swipe-down gesture is the only way
+                to unlock (see PlayerActivity.handleLockedTouch).
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/playerRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    android:keepScreenOn="true">
+
+    <!-- LibVLC renders the decoded video frames here; VLCVideoLayout manages the underlying
+         SurfaceView + subtitle surface and their lifecycle for us. -->
+    <org.videolan.libvlc.util.VLCVideoLayout
+        android:id="@+id/videoLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center" />
+
+    <!-- Step 9.3: buffering / connecting spinner. -->
+    <ProgressBar
+        android:id="@+id/progressLoading"
+        style="?android:attr/progressBarStyleLarge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminateTint="@color/televizo_accent" />
+
+    <!-- Step 9.3: network / playback error message (hidden until something goes wrong). -->
+    <TextView
+        android:id="@+id/textError"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_margin="24dp"
+        android:gravity="center"
+        android:text="@string/player_error_generic"
+        android:textColor="@color/televizo_text_primary"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <!-- Step 10.2/10.3: transient gesture feedback (e.g. "Brightness 60%", "+10s"). -->
+    <TextView
+        android:id="@+id/gestureIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_gesture_indicator"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="12dp"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:text="Volume 60%"
+        tools:visibility="visible" />
+
+    <!-- [FEATURE UPDATE]: silent D-pad Left/Right seek — minimal bottom-center timestamp readout. -->
+    <TextView
+        android:id="@+id/seekTimeIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="48dp"
+        android:background="@drawable/bg_gesture_indicator"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:textColor="@color/white"
+        android:textSize="14sp"
+        android:visibility="gone"
+        tools:text="01:23:45 / 02:15:00"
+        tools:visibility="visible" />
+
+    <!-- ===================== Step 10.1: controls overlay ===================== -->
+    <FrameLayout
+        android:id="@+id/controlsOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- Top bar: back + title + audio-only mode -->
+        <LinearLayout
+            android:id="@+id/topBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:background="@drawable/bg_player_scrim"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="8dp">
+
+            <ImageButton
+                android:id="@+id/btnBack"
+                style="@style/Player.ControlButton"
+                android:contentDescription="@string/action_back"
+                android:src="@drawable/ic_arrow_back" />
+
+            <TextView
+                android:id="@+id/textTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                tools:text="Channel name" />
+
+            <ImageButton
+                android:id="@+id/btnSubtitles"
+                style="@style/Player.ControlButton"
+                android:contentDescription="@string/player_subtitle_track"
+                android:src="@drawable/ic_subtitles" />
+
+            <ImageButton
+                android:id="@+id/btnAudioTrack"
+                style="@style/Player.ControlButton"
+                android:contentDescription="@string/player_audio_track"
+                android:src="@drawable/ic_audio_track" />
+
+            <ImageButton
+                android:id="@+id/btnSpeed"
+                style="@style/Player.ControlButton"
+                android:contentDescription="@string/player_speed"
+                android:src="@drawable/ic_speed" />
+
+            <ImageButton
+                android:id="@+id/btnPip"
+                style="@style/Player.ControlButton"
+                android:contentDescription="@string/player_pip"
+                android:src="@drawable/ic_pip" />
+        </LinearLayout>
+
+        <!-- Center transport: previous / play-pause / next. [FEATURE UPDATE] -->
+        <LinearLayout
+            android:id="@+id/centerControls"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/btnPrevious"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_previous"
+                android:focusable="true"
+                android:clickable="true"
+                android:foreground="@drawable/bg_player_control_focus"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_skip_previous"
+                android:tint="@color/white" />
+
+            <!-- promt1 §1 — the ABSOLUTE DEFAULT focus target. The remote lands here every time the
+                 panel appears and on every brand-new video (see PlayerActivity.focusPlayPause). -->
+            <ImageButton
+                android:id="@+id/btnPlayPause"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_play_pause"
+                android:focusable="true"
+                android:clickable="true"
+                android:foreground="@drawable/bg_player_control_focus"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_pause" />
+
+            <ImageButton
+                android:id="@+id/btnNext"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_next"
+                android:focusable="true"
+                android:clickable="true"
+                android:foreground="@drawable/bg_player_control_focus"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_skip_next"
+                android:tint="@color/white" />
+        </LinearLayout>
+
+        <!-- Bottom bar: elapsed | seekbar | duration + boost + fullscreen -->
+        <LinearLayout
+            android:id="@+id/bottomBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_player_scrim"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/textElapsed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="52dp"
+                android:gravity="center"
+                android:text="@string/player_time_zero"
+                android:textColor="@color/white"
+                android:textSize="13sp" />
+
+            <SeekBar
+                android:id="@+id/seekBar"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:clickable="true"
+                android:progressTint="@color/televizo_accent"
+                android:thumbTint="@color/televizo_accent" />
+
+            <TextView
+                android:id="@+id/textDuration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="52dp"
+                android:gravity="center"
+                android:text="@string/player_time_zero"
+                android:textColor="@color/white"
+                android:textSize="13sp" />
+
+            <ImageButton
+                android:id="@+id/btnRotate"
+                style="@style/Player.ControlButton"
+                android:contentDescription="@string/player_rotate"
+                android:src="@drawable/ic_screen_rotate" />
+
+            <ImageButton
+                android:id="@+id/btnFullscreen"
+                style="@style/Player.ControlButton"
+                android:contentDescription="@string/player_fullscreen"
+                android:src="@drawable/ic_fullscreen" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- ===================== Step 10.4: lock toggle ===================== -->
+    <ImageButton
+        android:id="@+id/btnLock"
+        style="@style/Player.ControlButton"
+        android:layout_gravity="start|center_vertical"
+        android:layout_marginStart="16dp"
+        android:background="@drawable/bg_gesture_indicator"
+        android:contentDescription="@string/player_lock"
+        android:focusable="false"
+        android:src="@drawable/ic_lock_open" />
+
+</FrameLayout>

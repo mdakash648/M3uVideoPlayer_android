@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    android:focusable="true"
+    android:foreground="@drawable/sel_item_focus"
+    android:stateListAnimator="@animator/focus_scale"
+    app:cardCornerRadius="4dp"
+    app:cardElevation="0dp"
+    app:cardBackgroundColor="@color/televizo_surface">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <ImageView
+            android:id="@+id/imageLogo"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:scaleType="centerCrop"
+            app:layout_constraintDimensionRatio="H,4:3"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            tools:src="@android:drawable/ic_menu_gallery" />
+
+        <ImageButton
+            android:id="@+id/buttonFavorite"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_margin="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/btn_star_big_off"
+            app:layout_constraintTop_toTopOf="@id/imageLogo"
+            app:layout_constraintEnd_toEndOf="@id/imageLogo" />
+
+        <TextView
+            android:id="@+id/textChannelName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="6dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="8dp"
+            android:textSize="12sp"
+            android:textColor="@color/televizo_text_primary"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:gravity="center"
+            app:layout_constraintTop_toBottomOf="@id/imageLogo"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            tools:text="Naagin.S07E41-42.Bengali.720P" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.cardview.widget.CardView>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Step 4.5 — options shown in the PopupMenu anchored to the view-mode switcher button on the
+  Channel List screen. Item order mirrors the ChannelViewMode enum for readability; the
+  fragment maps each id back to its enum constant.
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/mode_list"
+            android:title="@string/view_mode_list" />
+        <item
+            android:id="@+id/mode_grid"
+            android:title="@string/view_mode_grid" />
+        <item
+            android:id="@+id/mode_title_only"
+            android:title="@string/view_mode_title_only" />
+        <item
+            android:id="@+id/mode_poster"
+            android:title="@string/view_mode_poster" />
+    </group>
+</menu>

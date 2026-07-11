@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="16dp"
+    android:focusable="true"
+    android:background="@drawable/sel_item_focus"
+    android:stateListAnimator="@animator/focus_scale">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/textPlaylistName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textColor="@color/televizo_text_primary"
+            tools:text="Own movie" />
+
+        <TextView
+            android:id="@+id/textPlaylistType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textSize="12sp"
+            android:textColor="@color/televizo_text_secondary"
+            tools:text="http://example.com/playlist.m3u8" />
+    </LinearLayout>
+
+    <!-- Floating Resume Button engine — visible only when playlist_resume_points has an active,
+         unfinished pointer for this playlist. Tapping it relaunches the last-watched item. -->
+    <ImageButton
+        android:id="@+id/buttonResume"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginEnd="4dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:foreground="@drawable/fab_resume_focus_ring"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:clickable="true"
+        android:src="@drawable/ic_play"
+        android:contentDescription="@string/resume_last_played"
+        android:stateListAnimator="@animator/focus_scale"
+        android:visibility="gone"
+        app:tint="#00e5ff" />
+
+    <ImageButton
+        android:id="@+id/buttonRefresh"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:foreground="@drawable/bg_player_control_focus"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:clickable="true"
+        android:src="@android:drawable/ic_menu_rotate"
+        android:contentDescription="@string/refresh"
+        android:stateListAnimator="@animator/focus_scale"
+        app:tint="@color/televizo_text_secondary" />
+
+    <ImageButton
+        android:id="@+id/buttonDelete"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:foreground="@drawable/bg_player_control_focus"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:clickable="true"
+        android:src="@android:drawable/ic_menu_delete"
+        android:contentDescription="@string/delete"
+        android:stateListAnimator="@animator/focus_scale"
+        app:tint="@color/televizo_text_secondary" />
+
+    <ImageView
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@android:drawable/ic_media_next"
+        android:contentDescription="@null"
+        android:alpha="0.5" />
+
+</LinearLayout>

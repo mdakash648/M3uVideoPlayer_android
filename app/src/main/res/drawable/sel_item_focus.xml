@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- D-pad focus highlight for list/grid items: an accent border while focused (TV remote),
+     with a normal touch ripple otherwise. Pair with @animator/focus_scale for zoom.
+
+     NOTE: this must stay fully self-contained (no ?attr/... theme references). It's applied both
+     directly in layouts AND via the Settings.MenuCard style; when a drawable comes from a style,
+     some devices inflate it with theme=null, and a theme attribute inside it then crashes with
+     "Failed to resolve attribute". A literal ripple color avoids that. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33FFFFFF">
+    <item>
+        <selector>
+            <item android:state_focused="true">
+                <shape android:shape="rectangle">
+                    <solid android:color="@android:color/transparent" />
+                    <stroke
+                        android:width="2dp"
+                        android:color="@color/televizo_accent" />
+                    <corners android:radius="8dp" />
+                </shape>
+            </item>
+            <item>
+                <color android:color="@android:color/transparent" />
+            </item>
+        </selector>
+    </item>
+</ripple>

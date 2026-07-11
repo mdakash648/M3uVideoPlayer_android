@@ -1,0 +1,12 @@
+{
+  // Use a full JDK (with jlink) for Gradle builds instead of the Red Hat extension's bundled JRE,
+  // which lacks jlink.exe and breaks the Android build.
+  "java.import.gradle.java.home": "C:\\Program Files\\Java\\jdk-17",
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-17",
+      "path": "C:\\Program Files\\Java\\jdk-17",
+      "default": true
+    }
+  ]
+}

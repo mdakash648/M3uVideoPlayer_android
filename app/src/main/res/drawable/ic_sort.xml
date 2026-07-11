@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="@color/televizo_text_primary">
+    <!-- Descending bars glyph representing "sort". -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M3,5h12v2H3V5zM3,11h8v2H3v-2zM3,17h4v2H3v-2z" />
+</vector>

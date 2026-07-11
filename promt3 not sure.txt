@@ -1,0 +1,15 @@
+[BUG FIX] Android TV Home Screen Launcher Icon Asset Implementation
+
+1. ENVIRONMENT
+   └── PLATFORM : Android TV OS / Leanback Launcher Core.
+
+2. PROBLEM DESCRIPTION
+   ├── ISSUE  : The application icon appears as a solid black rectangle on the Android TV home screen/launcher channel row.
+   └── CAUSE  : The app is missing the standard TV banner asset, or the `AndroidManifest.xml` lacks the mandatory `android:banner` attribute required by TV Launchers.
+
+3. FIX REQUIREMENTS
+   ├── STEP_1 : Create or resize the app logo into a proper Leanback TV Banner asset with a 16:9 aspect ratio (Recommended Size: 320x180 dp or 432x243 px).
+   ├── STEP_2 : Place the new banner image inside the `res/drawable-xhdpi/` or `res/mipmap/` folder as `tv_banner.png`.
+   └── STEP_3 : Update `AndroidManifest.xml` inside the `<application>` tag to explicitly include:
+                `android:banner="@mipmap/tv_banner"`
+                `android:logo="@mipmap/tv_banner"`

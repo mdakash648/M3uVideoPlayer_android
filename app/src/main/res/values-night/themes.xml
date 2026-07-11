@@ -1,0 +1,29 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.M3uVideoPlayer" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="colorPrimary">@color/televizo_bg</item>
+        <item name="colorPrimaryVariant">@color/black</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">@color/televizo_accent</item>
+        <item name="colorSecondaryVariant">@color/televizo_accent</item>
+        <item name="colorOnSecondary">@color/black</item>
+
+        <!-- Background and Surface -->
+        <item name="android:windowBackground">@color/televizo_bg</item>
+        <item name="colorSurface">@color/televizo_surface</item>
+        <item name="android:colorBackground">@color/televizo_bg</item>
+
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor">@color/televizo_bg</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+
+        <!-- Popup Menu Styles -->
+        <item name="popupMenuStyle">@style/Widget.M3uVideoPlayer.PopupMenu</item>
+        <item name="actionBarPopupTheme">@style/Theme.M3uVideoPlayer.Popup</item>
+
+        <!-- Dialog Styles -->
+        <item name="materialAlertDialogTheme">@style/Theme.M3uVideoPlayer.Dialog</item>
+    </style>
+</resources>

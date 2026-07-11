@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PopupMenu shown when the folder view-mode toolbar action is tapped: List vs Grid. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/folder_mode_list"
+            android:title="@string/view_mode_list" />
+        <item
+            android:id="@+id/folder_mode_grid"
+            android:title="@string/view_mode_grid" />
+    </group>
+</menu>

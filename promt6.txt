@@ -1,0 +1,12 @@
+[BUG FIX] Android TV Layout: View Filter & Sort Options Rendering Bug
+
+1. TARGET UI
+   └── DIALOGUE / POPUP : "View Filter" and "Sort By" drop-down menus/sheets.
+
+2. PROBLEM DESCRIPTION
+   ├── ISSUE  : On Android TV devices, clicking the view or sort filter option reveals a completely pitch-black panel or unreadable black text on a black background.
+   └── CAUSE  : The component is inheriting standard mobile theme colors (`Theme.AppCompat` or `Theme.Material3`) which lack native fallback color definitions for Android TV leanback surfaces.
+
+3. FIX REQUIREMENTS
+   ├── ACTION_1 : Refactor the styles for the filter/sort popup windows to use explicit TV-friendly theme components or custom solid background colors (e.g., Dark Charcoal `#1C1C1C` or Slate `#252525`).
+   └── ACTION_2 : Ensure all text elements, checkboxes, and radio buttons inside the filter list are forced to white (`#FFFFFF`) or high-contrast gray so they are fully visible against the dark layout backdrop.

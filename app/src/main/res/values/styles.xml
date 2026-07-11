@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Card wrapping each section on the Add Playlist screen. -->
+    <style name="AddPlaylist.Card" parent="Widget.MaterialComponents.CardView">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">14dp</item>
+        <item name="cardBackgroundColor">@color/televizo_surface</item>
+        <item name="cardCornerRadius">18dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">@color/televizo_divider</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <!-- Small caps label above each card's content ("SOURCE", "DETAILS", ...). -->
+    <style name="AddPlaylist.SectionHeader" parent="TextAppearance.MaterialComponents.Subtitle2">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">12dp</item>
+        <item name="android:textColor">@color/televizo_accent</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <!-- Outlined text field used throughout the form. -->
+    <style name="AddPlaylist.Field" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">12dp</item>
+        <item name="boxStrokeColor">@color/televizo_divider</item>
+        <item name="hintTextColor">@color/televizo_text_secondary</item>
+        <item name="boxStrokeWidthFocused">2dp</item>
+        <item name="boxCornerRadiusTopStart">12dp</item>
+        <item name="boxCornerRadiusTopEnd">12dp</item>
+        <item name="boxCornerRadiusBottomStart">12dp</item>
+        <item name="boxCornerRadiusBottomEnd">12dp</item>
+    </style>
+
+    <!-- Outlined button used for source types and file attachment. -->
+    <style name="AddPlaylist.Button.Toggle" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <!-- Colors are inherited from ThemeOverlay.AddPlaylist.Accent applied to the ToggleGroup -->
+        <item name="rippleColor">@color/televizo_accent</item>
+    </style>
+
+    <style name="AddPlaylist.Button.Attach" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:textColor">@color/televizo_text_primary</item>
+        <item name="strokeColor">@color/televizo_accent</item>
+        <item name="iconTint">@color/televizo_accent</item>
+        <item name="rippleColor">@color/televizo_accent</item>
+    </style>
+
+    <!-- Destructive text button, e.g. "Remove Playlist". -->
+    <style name="AddPlaylist.Button.Danger" parent="Widget.MaterialComponents.Button.TextButton">
+        <item name="android:textColor">@color/televizo_error</item>
+        <item name="rippleColor">@color/televizo_error</item>
+    </style>
+
+    <!-- Card wrapping each row on the Settings screen ("Playlists", "Backup & Restore", ...). -->
+    <style name="Settings.MenuCard" parent="Widget.MaterialComponents.CardView">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">12dp</item>
+        <item name="android:foreground">@drawable/sel_item_focus</item>
+        <item name="android:stateListAnimator">@animator/focus_scale</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="cardBackgroundColor">@color/televizo_surface</item>
+        <item name="cardCornerRadius">18dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">@color/televizo_divider</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <!-- Circular +/- button on a Settings stepper row (Grid / Poster column count). -->
+    <style name="Settings.Stepper.Button" parent="Widget.AppCompat.ImageButton">
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:background">@drawable/sel_item_focus</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:tint">@color/televizo_text_primary</item>
+    </style>
+
+    <!-- Step 10.1 — a translucent, borderless icon button on the player controls overlay. -->
+    <!-- [BUGFIX] focusable=false is required: PlayerActivity handles ALL D-pad/remote input
+         itself (onKeyDown/onKeyUp). If any of these buttons is allowed real Android focus,
+         Android auto-assigns initial focus to one of them (often the visually central one,
+         i.e. play/pause) on first layout, and thereafter the button's own default key handling
+         silently intercepts KEYCODE_DPAD_CENTER/ENTER and fires its OnClickListener directly —
+         bypassing PlayerActivity's onKeyUp entirely and toggling playback outside of our
+         control, which looked like "pause, then auto-plays again a moment later". -->
+    <style name="Player.ControlButton" parent="Widget.AppCompat.ImageButton">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <!-- promt1 — focus ring for D-pad spatial navigation (CASE B). Kept as a foreground so the
+             touch ripple background above still works on phones. -->
+        <item name="android:foreground">@drawable/bg_player_control_focus</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:padding">8dp</item>
+        <!-- promt3 ACTION_1 — explicitly focusable and clickable for TV accessibility. -->
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:tint">@color/white</item>
+    </style>
+
+    <!-- The current column-count value shown between the +/- buttons ("Auto", "3", …). -->
+    <style name="Settings.Stepper.Value" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/televizo_text_primary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+</resources>

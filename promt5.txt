@@ -1,0 +1,20 @@
+[BUG FIX & REFACTOR] MX Player-Style Floating Resume Button (Isolated per Playlist/Folder)
+
+1. SCREEN VISIBILITY & DATA ISOLATION (প্লেলিস্ট অনুযায়ী সম্পূর্ণ আলাদা ডেটা)
+   ├── RULE 1 : The Floating Action Button (FAB) and its saved data must be strictly tied to the specific `playlist_id` or `folder_id` the user is currently viewing.
+   ├── RULE 2 : If a user watches a movie in Playlist_A, the Floating Resume Button must ONLY appear on Playlist_A's screen. Playlist_B and Playlist_C must remain clean/empty if they have no independent watch history.
+   └── DATABASE MAPPING : Save tracking data using a composite key: `[playlist_id + video_id + last_position]`. When loading a screen, query the DB specifically for that active `playlist_id` to fetch the correct last-played video object.
+
+2. MEDIA-TYPE SENSITIVE TRACKING (লাইভ টিভি স্পেশাল হ্যান্ডলিং)
+   ├── CASE A (VOD / Movies / Local Files) : Store both the `video_id` and the exact `current_position` timestamp in milliseconds (e.g., 55:20).
+   └── CASE B (Live TV / IPTV Streams)     : If the playlist type is LIVE_TV, do NOT store or restore any time duration/timestamp. Only track and save the `channel_id`. Clicking the FAB must launch the channel live from the absolute real-time edge.
+
+3. PLAYBACK CONTEXT & FULL PLAYLIST LOOP FIX (Next/Previous বাটন বাগ ফিক্স)
+   ├── PROBLEM : Launching a video via the FAB currently disables the player's Next (⏭️) and Previous (⏮️) remote buttons because the full playlist context is missing.
+   ├── FIX REQUIREMENT : When the FAB is clicked, do NOT just play a single standalone video file. You must pass the ENTIRE playlist array/list and the exact index position of that video to the `PlayerActivity` intent.
+   └── BEHAVIOR : The player must behave exactly as if the user manually scrolled down and clicked that video inside the folder. Next and Previous buttons must fully work to skip between files in that active playlist.
+
+4. UI/UX SPECIFICATIONS
+   ├── STYLING  : Floating Action Button (FAB) overlay with a clean "Play/Resume" icon.
+   ├── ALPHA    : Default opacity must be exactly 50% (`alpha="0.5"`) to prevent blocking text.
+   └── TV FOCUS : When the TV Remote D-Pad focuses on this FAB, smoothly scale it up slightly, change alpha to 100% (`alpha="1.0"`), and render a distinct focus boundary ring.

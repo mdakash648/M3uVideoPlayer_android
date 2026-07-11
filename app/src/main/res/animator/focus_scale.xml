@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- stateListAnimator that zooms a view slightly while it holds D-pad focus (Android TV look).
+     Never triggers under touch, so phone UX is unaffected. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.06"
+                android:duration="150" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.06"
+                android:duration="150" />
+        </set>
+    </item>
+    <item>
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.0"
+                android:duration="150" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.0"
+                android:duration="150" />
+        </set>
+    </item>
+</selector>

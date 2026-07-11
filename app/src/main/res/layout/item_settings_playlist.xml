@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Row on the Settings ▸ Playlists screen. Tapping anywhere opens the Edit Playlist screen;
+     unlike item_playlist.xml (main list) this has no inline refresh/delete actions — removal
+     lives inside the Edit screen. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="16dp"
+    android:focusable="true"
+    android:background="@drawable/sel_item_focus"
+    android:stateListAnimator="@animator/focus_scale">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/textPlaylistName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textColor="@color/televizo_text_primary"
+            tools:text="Own movie" />
+
+        <TextView
+            android:id="@+id/textPlaylistUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textSize="12sp"
+            android:textColor="@color/televizo_text_secondary"
+            tools:text="http://example.com/playlist.m3u8" />
+    </LinearLayout>
+
+    <ImageView
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@android:drawable/ic_media_next"
+        android:contentDescription="@null"
+        android:alpha="0.5" />
+
+</LinearLayout>

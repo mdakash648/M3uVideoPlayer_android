@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  promt5 — TV D-pad focus "glow ring" for the floating resume FAB. Applied as the FAB's foreground
+  so its normal circular background/ripple is preserved; a bright accent ring (plus a soft translucent
+  accent fill) only appears while the button holds D-pad focus, and it's transparent otherwise. The
+  companion 0.5→1.0 alpha bump is driven from the fragment's focus listener.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="oval">
+            <solid android:color="#33FBC02D" />
+            <stroke
+                android:width="3dp"
+                android:color="@color/televizo_accent" />
+        </shape>
+    </item>
+    <item>
+        <color android:color="@android:color/transparent" />
+    </item>
+</selector>

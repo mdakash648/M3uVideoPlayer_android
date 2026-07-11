@@ -1,0 +1,13 @@
+[BUG FIX] D-Pad Timeline Seeking: Resolve "Snap Back to Old Position" Defect
+
+1. TARGET SYSTEM
+   └── COMPONENT : Video Player Progress Bar / SeekBar / Tracking Timeline.
+
+2. PROBLEM DESCRIPTION
+   ├── ACTUAL BEHAVIOR : When using the D-Pad Right/Left keys to scrub across the progress bar, the pointer moves ahead (e.g., from 10min to 20min). However, upon releasing the key or pressing OK, the playback snaps right back to the original position (10min) instead of committing the seek.
+   └── CAUSE : The player core is executing a constant tracking loop update that overrides the manual user D-pad seek input before the `onStopTrackingTouch` or `seekTo()` event finishes processing.
+
+3. FIX REQUIREMENTS
+   ├── STEP_1 : When the user is actively holding down the D-Pad Left/Right arrows on the Progress Bar, temporarily **pause/suspend** the background timeline update timer thread.
+   ├── STEP_2 : Capture the absolute target position calculated by the D-pad navigation (e.g., current 10min + skipped 10min = target 20min).
+   └── STEP_3 : On D-pad key release or Enter press, commit the explicit player seek action: `player.seekTo(targetPosition)`. Only resume the background updates *after* the player successfully establishes playback at the new 20min milestone.

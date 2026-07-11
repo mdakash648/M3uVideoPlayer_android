@@ -1,0 +1,14 @@
+[FEATURE UPDATE] Persistent State Video Player: "Start Over" vs "Continue" Prompt
+
+1. BACKEND STATE TRACKING
+   ├── ENGINE : Automatically save the current video playback timestamp (current position in milliseconds) to local Room DB/SharedPreferences every 5 seconds.
+   └── RULE   : If the user exits the video after watching at least 15 seconds, store the session. If the video is within 95% of completion, mark it as fully watched.
+
+2. INTENT & UI TRIGGER
+   ├── CONDITION : When the user re-opens a previously watched video (e.g., Iron Man movie closed at 55:00 min).
+   └── UI COMPONENT : Show a clean, dark-themed center Modal Dialogue box (TV-friendly) or a persistent bottom sheet containing two action buttons:
+       ├── BUTTON 1: [Start Over] ➔ Reset playback to 00:00.
+       └── BUTTON 2: [Continue]   ➔ Instantly seek to the saved timestamp (55:00) and resume playback.
+
+3. D-PAD ACCESSIBILITY
+   └── Default focus must automatically land on the [Continue] button, allowing a single click to resume the video.

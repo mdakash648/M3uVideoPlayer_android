@@ -1,0 +1,206 @@
+<resources>
+    <string name="app_name">M3uVideoPlayer</string>
+    <string name="hello_akash">Hello Akash</string>
+
+    <!-- Android TV (Step 7) -->
+    <string name="tv_loading">Loading…</string>
+    <string name="tv_browse_title">M3U Video Player</string>
+    <string name="tv_row_favorites">Favorites</string>
+    <string name="tv_uncategorized">Uncategorized</string>
+    <string name="tv_channel_count">%1$d channels</string>
+    <string name="tv_player_not_ready">Player coming soon: %1$s</string>
+    <string name="tv_playlists_title">Playlists</string>
+    <string name="tv_add_playlist_card">Add playlist</string>
+    <string name="tv_add_type_label">Source type</string>
+    <string name="tv_add_username_label">Username (Xtream)</string>
+    <string name="tv_add_password_label">Password (Xtream)</string>
+    <string name="tv_add_frequency_label">Update frequency</string>
+
+    <!-- Playlist list screen -->
+    <string name="title_playlists">Playlists</string>
+    <string name="add_playlist">Add Playlist</string>
+    <string name="no_playlists_yet">No playlists yet. Tap + to add one.</string>
+    <string name="delete">Delete</string>
+    <string name="refresh">Refresh</string>
+
+    <!-- Add playlist screen -->
+    <string name="playlist_name">Playlist name</string>
+    <string name="playlist_url">Playlist / Xtream server URL</string>
+    <string name="xtream_username">Username</string>
+    <string name="xtream_password">Password</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="type_m3u">M3U / M3U8 URL</string>
+    <string name="type_xtream">Xtream Codes</string>
+    <string name="error_name_required">Please enter a name</string>
+    <string name="error_url_required">Please enter a valid URL</string>
+    <string name="error_credentials_required">Username and password are required for Xtream</string>
+
+    <!-- Add playlist: modern redesign, file source & auto-update -->
+    <string name="add_playlist_subtitle">Add an M3U/Xtream source and choose how often it refreshes.</string>
+    <string name="section_source">Source</string>
+    <string name="section_details">Details</string>
+    <string name="section_auto_update">Auto-update</string>
+    <string name="paste_url_or_attach">Paste a URL or attach a file</string>
+    <string name="attach_file">Attach file</string>
+    <string name="no_file_selected">No file selected</string>
+    <string name="remove_file">Remove file</string>
+    <string name="how_often_to_update">How often to update</string>
+    <string name="how_often_to_update_hint">Update frequency</string>
+    <string name="freq_on_start">On application start</string>
+    <string name="freq_6_hours">Every 6 hours</string>
+    <string name="freq_12_hours">Every 12 hours</string>
+    <string name="freq_3_days">Every 3 days</string>
+    <string name="freq_week">Every week</string>
+    <string name="freq_never">Never</string>
+
+    <!-- Order MUST match UpdateFrequency enum ordinals. -->
+    <string-array name="update_frequency_options">
+        <item>@string/freq_on_start</item>
+        <item>@string/freq_6_hours</item>
+        <item>@string/freq_12_hours</item>
+        <item>@string/freq_3_days</item>
+        <item>@string/freq_week</item>
+        <item>@string/freq_never</item>
+    </string-array>
+
+    <!-- Group / folder browsing screen -->
+    <string name="no_groups_yet">No groups found for this playlist yet.</string>
+
+    <!-- Channel list screen -->
+    <string name="favorite">Favorite</string>
+    <string name="no_channels_yet">No channels found for this playlist yet.</string>
+
+    <!-- Step 4.5: view-mode switcher -->
+    <string name="change_view_mode">Change view mode</string>
+    <string name="view_mode_list">List</string>
+    <string name="view_mode_grid">Grid</string>
+    <string name="view_mode_title_only">Title only</string>
+    <string name="view_mode_poster">Poster</string>
+
+    <!-- Folder screen toolbar: search / view-mode / settings -->
+    <string name="title_folders">Folders</string>
+    <string name="search">Search</string>
+    <string name="search_hint">Search folders and channels</string>
+    <string name="view_mode">View mode</string>
+    <string name="settings">Settings</string>
+    <string name="no_search_results">No matches found.</string>
+
+    <!-- Folder tile sort filter -->
+    <string name="all_channels">All channels</string>
+    <string name="sort">Sort</string>
+    <string name="sort_ascending">Ascending</string>
+    <string name="sort_descending">Descending</string>
+    <string name="sort_playlist">According to Playlist</string>
+
+    <!-- Settings screen -->
+    <string name="title_settings">Settings</string>
+    <string name="settings_placeholder">Settings options will be added soon.</string>
+    <string name="settings_menu_playlists">Playlists</string>
+    <string name="settings_menu_playlists_subtitle">View, edit, and remove your saved playlists</string>
+    <string name="settings_menu_backup_restore">Backup &amp; Restore</string>
+    <string name="settings_menu_backup_restore_subtitle">Save or restore your app data</string>
+
+    <!-- Settings ▸ Display (custom column counts for the Folder & Folder Content grids) -->
+    <string name="settings_section_display">Display</string>
+    <string name="settings_grid_columns">Grid View Columns</string>
+    <string name="settings_grid_columns_subtitle">Items per row in Grid view (Folders &amp; Channels)</string>
+    <string name="settings_poster_columns">Poster View Columns</string>
+    <string name="settings_poster_columns_subtitle">Items per row in Poster view</string>
+    <string name="column_count_auto">Auto</string>
+    <string name="column_count_decrease">Fewer columns</string>
+    <string name="column_count_increase">More columns</string>
+
+    <!-- Step 9 — LibVLC player screen -->
+    <string name="player_error_generic">Playback error.</string>
+    <string name="player_error_network">Couldn\'t play this channel. Check your network and try again.</string>
+    <string name="player_error_no_url">This channel has no stream to play.</string>
+    <string name="player_error_ended">Playback ended.</string>
+    <string name="player_boost_off">Boost: 100%</string>
+    <string name="player_boost_on">Boost: 200%</string>
+
+    <!-- Step 10 — Advanced player UI -->
+    <string name="action_back">Back</string>
+    <string name="player_play_pause">Play or pause</string>
+    <string name="player_fullscreen">Toggle fullscreen</string>
+    <string name="player_audio_mode">Play as audio</string>
+    <string name="player_lock">Lock controls</string>
+    <string name="player_unlock">Unlock controls</string>
+    <string name="player_time_zero">00:00</string>
+    <string name="player_locked">Screen locked</string>
+    <string name="player_unlocked">Screen unlocked</string>
+    <string name="player_gesture_brightness">Brightness %1$d%%</string>
+    <string name="player_gesture_volume">Volume %1$d%%</string>
+    <string name="player_gesture_seek_forward">+%1$ds</string>
+    <string name="player_gesture_seek_backward">-%1$ds</string>
+    <string name="player_gesture_seek_drag_forward">▶▶ +%1$s</string>
+    <string name="player_gesture_seek_drag_backward">◀◀ -%1$s</string>
+    <string name="player_seek_time_with_duration">%1$s / %2$s</string>
+    <string name="player_locked_hint">Swipe Up to Down to Unlock</string>
+    <!-- [BUG FIX] Live TV Playback Safety — RULE B seek-lock toast. -->
+    <string name="player_live_seek_disabled">Seeking is disabled on Live Channels</string>
+    <string name="player_audio_notification_channel">Background playback</string>
+    <string name="player_audio_playing">Playing audio</string>
+    <string name="player_audio_mode_on">Audio-only mode on</string>
+
+    <!-- Step 11 — Multi-tasking & playback (PiP, speed, track OSD, catch-up) -->
+    <string name="player_pip">Picture-in-picture</string>
+    <string name="player_speed">Playback speed</string>
+    <string name="player_speed_current">Speed %1$s</string>
+    <string name="player_speed_normal">Normal (1.0x)</string>
+    <string name="player_speed_holding">2.0x (hold)</string>
+    <string name="player_audio_track">Audio track</string>
+    <string name="player_subtitle_track">Subtitles</string>
+    <string name="player_track_none">Disable</string>
+    <string name="player_track_none_short">Off</string>
+    <string name="player_no_audio_tracks">No audio tracks</string>
+    <string name="player_no_subtitle_tracks">No subtitles</string>
+    <string name="player_osd_audio_selected">Audio: %1$s</string>
+    <string name="player_osd_subtitle_selected">Subtitles: %1$s</string>
+    <string name="player_seek_10">10s</string>
+    <string name="player_seek_30">30s</string>
+
+    <!-- [FEATURE UPDATE] Screen rotate + Next/Previous queue controls. -->
+    <string name="player_rotate">Rotate screen</string>
+    <string name="player_next">Next video</string>
+    <string name="player_previous">Previous video</string>
+
+    <!-- promt5 — floating resume button. -->
+    <string name="resume_last_played">Resume last played</string>
+
+    <!-- promt4 — resume-playback prompt. -->
+    <string name="player_resume_title">Resume playback</string>
+    <string name="player_resume_message">You left off at %1$s. Continue watching or start over?</string>
+    <string name="player_resume_continue">Continue</string>
+    <string name="player_resume_start_over">Start over</string>
+
+    <!-- Settings ▸ Playlists screen -->
+    <string name="title_manage_playlists">Playlists</string>
+
+    <!-- Backup & Restore screen -->
+    <string name="title_backup_restore">Backup &amp; Restore</string>
+    <string name="backup_restore_placeholder">Backup and restore options will be added soon.</string>
+    <string name="backup_restore_subtitle">Save all your playlists, favorites, and settings to a file, or load them back from a previous backup.</string>
+    <string name="action_save_application_data">Save Application Data</string>
+    <string name="action_save_application_data_subtitle">Export everything to a JSON backup file</string>
+    <string name="action_load_application_data">Load Application Data</string>
+    <string name="action_load_application_data_subtitle">Restore from a previously saved JSON backup file</string>
+    <string name="action_load_demo_data">Load Demo Data</string>
+    <string name="action_load_demo_data_subtitle">Instantly fill the app with bundled sample playlists</string>
+    <string name="demo_data_load_success">Demo data loaded successfully!</string>
+    <string name="backup_export_success">Backup saved successfully.</string>
+    <string name="backup_import_success">Backup restored successfully.</string>
+    <string name="backup_import_confirm_title">Restore this backup?</string>
+    <string name="backup_import_confirm_message">This will replace all current playlists, favorites, and settings with the contents of the selected file. This can\'t be undone.</string>
+    <string name="restore">Restore</string>
+
+    <!-- Edit playlist screen -->
+    <string name="edit_playlist">Edit Playlist</string>
+    <string name="edit_playlist_subtitle">Update your playlist details or remove it.</string>
+    <string name="remove_playlist">Remove Playlist</string>
+    <string name="remove_playlist_confirm_title">Remove playlist?</string>
+    <string name="remove_playlist_confirm_message">\"%1$s\" will be permanently deleted, along with its saved channels and groups. This can\'t be undone.</string>
+    <string name="remove">Remove</string>
+    <string name="playlist_updated">Playlist updated</string>
+    <string name="playlist_removed">Playlist removed</string>
+</resources>
