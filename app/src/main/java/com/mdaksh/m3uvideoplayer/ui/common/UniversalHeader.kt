@@ -27,6 +27,10 @@ import com.mdaksh.m3uvideoplayer.R
 fun Fragment.setupUniversalHeader(
     title: String,
     showBack: Boolean = false,
+    showSearch: Boolean = true,
+    showViewMode: Boolean = true,
+    showSort: Boolean = true,
+    showSettings: Boolean = true,
     onQueryChange: ((String) -> Unit)? = null,
     onViewMode: (() -> Unit)? = null,
     onSort: (() -> Unit)? = null,
@@ -47,29 +51,37 @@ fun Fragment.setupUniversalHeader(
     toolbar.inflateMenu(R.menu.menu_universal)
 
     val searchItem = toolbar.menu.findItem(R.id.action_search)
-    (searchItem.actionView as SearchView).apply {
-        queryHint = getString(R.string.search)
-        setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean = false
-            override fun onQueryTextChange(newText: String?): Boolean {
-                onQueryChange?.invoke(newText.orEmpty())
+    searchItem.isVisible = showSearch
+    if (showSearch) {
+        (searchItem.actionView as SearchView).apply {
+            queryHint = getString(R.string.search)
+            setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                override fun onQueryTextSubmit(query: String?): Boolean = false
+                override fun onQueryTextChange(newText: String?): Boolean {
+                    onQueryChange?.invoke(newText.orEmpty())
+                    return true
+                }
+            })
+        }
+        // Expanding search frees the whole bar for the input (title hidden); collapsing restores the
+        // title and clears any active query so the full list returns.
+        searchItem.setOnActionExpandListener(object : MenuItem.OnActionExpandListener {
+            override fun onMenuItemActionExpand(item: MenuItem): Boolean {
+                toolbar.title = null
+                return true
+            }
+
+            override fun onMenuItemActionCollapse(item: MenuItem): Boolean {
+                toolbar.title = title
+                onQueryChange?.invoke("")
                 return true
             }
         })
     }
-    // Expanding search frees the whole bar for the input (title hidden); collapsing restores the
-    // title and clears any active query so the full list returns.
-    searchItem.setOnActionExpandListener(object : MenuItem.OnActionExpandListener {
-        override fun onMenuItemActionExpand(item: MenuItem): Boolean {
-            toolbar.title = null
-            return true
-        }
-        override fun onMenuItemActionCollapse(item: MenuItem): Boolean {
-            toolbar.title = title
-            onQueryChange?.invoke("")
-            return true
-        }
-    })
+
+    toolbar.menu.findItem(R.id.action_view_mode).isVisible = showViewMode
+    toolbar.menu.findItem(R.id.action_sort).isVisible = showSort
+    toolbar.menu.findItem(R.id.action_settings).isVisible = showSettings
 
     // Every action stays clickable; a missing callback is simply a no-op (still "handled" so the
     // event isn't bubbled), keeping the icon visible-but-inert on screens it doesn't apply to.

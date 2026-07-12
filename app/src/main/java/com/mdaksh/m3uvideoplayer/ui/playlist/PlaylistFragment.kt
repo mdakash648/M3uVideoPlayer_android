@@ -43,8 +43,6 @@ class PlaylistFragment : Fragment() {
                     PlaylistFragmentDirections.actionPlaylistFragmentToGroupListFragment(playlist.id)
                 )
             },
-            onRefresh = { playlist -> viewModel.refresh(playlist) },
-            onDelete = { playlist -> viewModel.delete(playlist) },
             onResume = { target ->
                 // Floating Resume Button engine — RULE B / LOGIC_2: live channels bypass positionMs
                 // entirely and relaunch at the real-time edge (-1 = no seek).
@@ -58,7 +56,10 @@ class PlaylistFragment : Fragment() {
 
         setupUniversalHeader(
             title = getString(R.string.title_playlists),
-            onQueryChange = { viewModel.setSearchQuery(it) },
+            showBack = true,
+            showSearch = false,
+            showViewMode = false,
+            showSort = false,
             onSettings = {
                 findNavController().navigate(R.id.action_playlistFragment_to_settingsFragment)
             },

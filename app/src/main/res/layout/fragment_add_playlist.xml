@@ -68,7 +68,8 @@
                     android:id="@+id/layoutUrl"
                     style="@style/AddPlaylist.Field"
                     android:hint="@string/playlist_url"
-                    app:startIconDrawable="@drawable/ic_link">
+                    app:startIconDrawable="@drawable/ic_link"
+                    app:startIconTint="@color/televizo_accent">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/editUrl"
@@ -189,7 +190,9 @@
                     android:id="@+id/layoutPassword"
                     style="@style/AddPlaylist.Field"
                     android:hint="@string/xtream_password"
-                    android:visibility="gone">
+                    android:visibility="gone"
+                    app:startIconDrawable="@drawable/ic_lock"
+                    app:startIconTint="@color/televizo_accent">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/editPassword"
@@ -221,15 +224,18 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="@string/how_often_to_update_hint"
-                    app:boxStrokeColor="@color/televizo_divider"
-                    app:hintTextColor="@color/televizo_text_secondary">
+                    app:boxStrokeColor="@color/sl_edittext_stroke"
+                    app:hintTextColor="@color/televizo_accent"
+                    android:textColorHint="@color/televizo_text_secondary">
 
                     <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/dropdownFrequency"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="none"
-                        android:textColor="@color/televizo_text_primary" />
+                        android:padding="16dp"
+                        android:textColor="@color/televizo_text_primary"
+                        android:background="@null" />
                 </com.google.android.material.textfield.TextInputLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -273,7 +279,7 @@
                 android:paddingHorizontal="28dp"
                 android:text="@string/save"
                 android:textColor="@color/black"
-                app:backgroundTint="@color/televizo_accent" />
+                app:backgroundTint="@color/sl_button_accent" />
         </LinearLayout>
 
         <ProgressBar

@@ -39,7 +39,14 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        setupUniversalHeader(title = getString(R.string.title_settings), showBack = true)
+        setupUniversalHeader(
+            title = getString(R.string.title_settings),
+            showBack = true,
+            showSearch = false,
+            showViewMode = false,
+            showSort = false,
+            showSettings = false
+        )
 
         binding.cardMenuPlaylists.setOnClickListener {
             findNavController().navigate(R.id.action_settingsFragment_to_settingsPlaylistsFragment)

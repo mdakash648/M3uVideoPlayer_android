@@ -15,6 +15,12 @@
         <item name="colorSurface">@color/televizo_surface</item>
         <item name="android:colorBackground">@color/televizo_bg</item>
 
+        <!-- Global Text Colors -->
+        <item name="android:textColorPrimary">@color/televizo_text_primary</item>
+        <item name="android:textColorSecondary">@color/televizo_text_secondary</item>
+        <item name="android:editTextColor">@color/televizo_text_primary</item>
+        <item name="android:textColorHint">@color/televizo_text_secondary</item>
+
         <!-- Status bar color. -->
         <item name="android:statusBarColor">@color/televizo_bg</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>

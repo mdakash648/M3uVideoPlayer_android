@@ -59,7 +59,13 @@ class SettingsPlaylistsFragment : Fragment() {
     }
 
     private fun setupToolbar() {
-        setupUniversalHeader(title = getString(R.string.title_manage_playlists), showBack = true)
+        setupUniversalHeader(
+            title = getString(R.string.title_manage_playlists),
+            showBack = true,
+            showSearch = false,
+            showViewMode = false,
+            showSort = false
+        )
     }
 
     override fun onDestroyView() {

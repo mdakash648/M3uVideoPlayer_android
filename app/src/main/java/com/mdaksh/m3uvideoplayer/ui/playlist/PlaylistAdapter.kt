@@ -12,8 +12,6 @@ import com.mdaksh.m3uvideoplayer.domain.model.PlaylistResumeTarget
 
 class PlaylistAdapter(
     private val onOpen: (Playlist) -> Unit,
-    private val onRefresh: (Playlist) -> Unit,
-    private val onDelete: (Playlist) -> Unit,
     /** Floating Resume Button engine — tap relaunches [PlaylistResumeTarget.channel]. */
     private val onResume: (PlaylistResumeTarget) -> Unit
 ) : ListAdapter<Playlist, PlaylistAdapter.PlaylistViewHolder>(DIFF_CALLBACK) {
@@ -59,8 +57,6 @@ class PlaylistAdapter(
             binding.textPlaylistType.text = playlist.url
 
             binding.root.setOnClickListener { onOpen(playlist) }
-            binding.buttonRefresh.setOnClickListener { onRefresh(playlist) }
-            binding.buttonDelete.setOnClickListener { onDelete(playlist) }
             bindResume(playlist)
         }
 

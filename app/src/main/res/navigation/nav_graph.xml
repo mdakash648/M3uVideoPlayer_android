@@ -28,7 +28,11 @@
         android:id="@+id/addPlaylistFragment"
         android:name="com.mdaksh.m3uvideoplayer.ui.addplaylist.AddPlaylistFragment"
         android:label="Add Playlist"
-        tools:layout="@layout/fragment_add_playlist" />
+        tools:layout="@layout/fragment_add_playlist">
+        <action
+            android:id="@+id/action_addPlaylistFragment_to_settingsFragment"
+            app:destination="@id/settingsFragment" />
+    </fragment>
 
     <fragment
         android:id="@+id/groupListFragment"
@@ -84,6 +88,10 @@
         <argument
             android:name="playlistId"
             app:argType="long" />
+
+        <action
+            android:id="@+id/action_editPlaylistFragment_to_settingsFragment"
+            app:destination="@id/settingsFragment" />
     </fragment>
 
     <fragment

@@ -56,39 +56,6 @@
         android:visibility="gone"
         app:tint="#00e5ff" />
 
-    <ImageButton
-        android:id="@+id/buttonRefresh"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:foreground="@drawable/bg_player_control_focus"
-        android:focusable="true"
-        android:focusableInTouchMode="true"
-        android:clickable="true"
-        android:src="@android:drawable/ic_menu_rotate"
-        android:contentDescription="@string/refresh"
-        android:stateListAnimator="@animator/focus_scale"
-        app:tint="@color/televizo_text_secondary" />
 
-    <ImageButton
-        android:id="@+id/buttonDelete"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:foreground="@drawable/bg_player_control_focus"
-        android:focusable="true"
-        android:focusableInTouchMode="true"
-        android:clickable="true"
-        android:src="@android:drawable/ic_menu_delete"
-        android:contentDescription="@string/delete"
-        android:stateListAnimator="@animator/focus_scale"
-        app:tint="@color/televizo_text_secondary" />
-
-    <ImageView
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:src="@android:drawable/ic_media_next"
-        android:contentDescription="@null"
-        android:alpha="0.5" />
 
 </LinearLayout>

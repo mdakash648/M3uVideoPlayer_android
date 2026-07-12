@@ -229,6 +229,17 @@ class PlayerActivity : AppCompatActivity() {
     private val hideControlsRunnable = Runnable { setControlsVisible(false) }
     private val hideIndicatorRunnable = Runnable { binding.gestureIndicator.visibility = View.GONE }
     private val hideSeekTimeIndicatorRunnable = Runnable { binding.seekTimeIndicator.visibility = View.GONE }
+    
+    private val commitDpadBarSeekRunnable = Runnable {
+        if (!userSeeking) return@Runnable
+        userSeeking = false
+        if (blockIfLiveSeek()) { scheduleHideControls(); return@Runnable }
+        // [BUG FIX] STEP_2 & STEP_3 — commit the explicit seek target accumulated from D-pad interaction
+        // on the SeekBar, and resume background updates.
+        mediaPlayer?.time = binding.seekBar.progress.toLong()
+        scheduleHideControls()
+    }
+
     private val dpadSeekRunnable = Runnable {
         pendingDpadForward?.let { seekSilently(if (it) SEEK_STEP_MS else -SEEK_STEP_MS) }
         pendingDpadForward = null
@@ -240,6 +251,36 @@ class PlayerActivity : AppCompatActivity() {
      * ticker can't be stranded/suspended forever.
      */
     private val dpadSeekSettleTimeout = Runnable { dpadSeeking = false }
+
+    /**
+     * [BUG FIX] Zank Remote / External Volume Sync: Keeps track of the system hardware volume that we
+     * intentionally set, so we can ignore our own changes. If the system volume changes externally
+     * (e.g. via the Zank remote app), we apply that change to our internal 0-200% appVolume instead.
+     */
+    private var expectedSystemVolume = -1
+
+    private val volumeReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "android.media.VOLUME_CHANGED_ACTION") {
+                val streamType = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1)
+                if (streamType == AudioManager.STREAM_MUSIC) {
+                    val newVolume = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_VALUE", -1)
+                    val oldVolume = intent.getIntExtra("android.media.EXTRA_PREV_VOLUME_STREAM_VALUE", -1)
+                    if (newVolume != -1 && oldVolume != -1 && newVolume != expectedSystemVolume) {
+                        val direction = if (newVolume > oldVolume) 1 else if (newVolume < oldVolume) -1 else 0
+                        if (direction != 0) {
+                            val nextVolume = (appVolume + (direction * VOLUME_KEY_STEP)).coerceIn(0, VOLUME_BOOSTED)
+                            if (nextVolume != appVolume) {
+                                setVolume(nextVolume)
+                            } else {
+                                applyVolume()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -261,6 +302,13 @@ class PlayerActivity : AppCompatActivity() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         systemMaxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         appVolume = currentSystemVolumePercent()
+
+        @SuppressLint("UnspecifiedRegisterReceiverFlag")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(volumeReceiver, android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"), Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(volumeReceiver, android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"))
+        }
 
         mediaPlayer = MediaPlayer(libVlc).also { player ->
             // 3rd arg = enableSubtitles: create the subtitle surface so selected SPU tracks
@@ -596,7 +644,17 @@ class PlayerActivity : AppCompatActivity() {
 
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) textElapsed.text = formatTime(progress.toLong())
+                if (fromUser) {
+                    textElapsed.text = formatTime(progress.toLong())
+                    // STEP_1: Suspend timeline update when user manually drags or D-pad seeks
+                    if (!userSeeking) {
+                        userSeeking = true
+                        handler.removeCallbacks(hideControlsRunnable)
+                    }
+                    // Fallback commit for D-pad if key listener misses UP event
+                    handler.removeCallbacks(commitDpadBarSeekRunnable)
+                    handler.postDelayed(commitDpadBarSeekRunnable, 1000)
+                }
             }
 
             override fun onStartTrackingTouch(sb: SeekBar) {
@@ -605,16 +663,33 @@ class PlayerActivity : AppCompatActivity() {
                 if (isLiveStream()) return
                 userSeeking = true
                 handler.removeCallbacks(hideControlsRunnable)
+                handler.removeCallbacks(commitDpadBarSeekRunnable)
             }
 
             override fun onStopTrackingTouch(sb: SeekBar) {
-                if (!userSeeking) return   // never started (see onStartTrackingTouch) — nothing to commit
-                userSeeking = false
-                if (blockIfLiveSeek()) { scheduleHideControls(); return }
-                mediaPlayer?.time = sb.progress.toLong()
-                scheduleHideControls()
+                handler.removeCallbacks(commitDpadBarSeekRunnable)
+                commitDpadBarSeekRunnable.run()
             }
         })
+
+        seekBar.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    if (!userSeeking) {
+                        userSeeking = true
+                        handler.removeCallbacks(hideControlsRunnable)
+                    }
+                    handler.removeCallbacks(commitDpadBarSeekRunnable)
+                } else if (event.action == KeyEvent.ACTION_UP) {
+                    // STEP_3: Commit seek quickly on D-pad key release
+                    handler.removeCallbacks(commitDpadBarSeekRunnable)
+                    handler.postDelayed(commitDpadBarSeekRunnable, 250) // short debounce
+                }
+                false
+            } else {
+                false
+            }
+        }
     }
 
     private fun togglePlayPause() {
@@ -872,11 +947,13 @@ class PlayerActivity : AppCompatActivity() {
                 val target = ((appVolume / 100f) * systemMaxVolume)
                     .roundToInt()
                     .coerceIn(0, systemMaxVolume)
+                expectedSystemVolume = target
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
             }
             mediaPlayer?.volume = VOLUME_NORMAL
         } else {
             if (systemMaxVolume > 0) {
+                expectedSystemVolume = systemMaxVolume
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, systemMaxVolume, 0)
             }
             mediaPlayer?.volume = appVolume
@@ -1497,6 +1574,11 @@ class PlayerActivity : AppCompatActivity() {
         }
         if (controlsShowing) {
             val focused = currentFocus
+            if (userSeeking && focused == binding.seekBar) {
+                handler.removeCallbacks(commitDpadBarSeekRunnable)
+                commitDpadBarSeekRunnable.run()
+                return
+            }
             if (focused != null && focused.isFocusable) focused.performClick() else togglePlayPause()
             scheduleHideControls()
         } else {
@@ -1618,6 +1700,11 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            unregisterReceiver(volumeReceiver)
+        } catch (e: Exception) {
+            // Ignored
+        }
         resumeScope.cancel()
         handler.removeCallbacksAndMessages(null)
         mediaPlayer?.let { player ->

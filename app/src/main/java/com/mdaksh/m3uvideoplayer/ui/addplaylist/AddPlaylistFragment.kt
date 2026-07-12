@@ -112,17 +112,25 @@ class AddPlaylistFragment : Fragment() {
         }
     }
 
-    /** This screen also owns the shared toolbar while visible: universal header + a back arrow.
-     *  Search/View/Sort render (per the "header on every screen" rule) but are inert on this form. */
+    /** This screen also owns the shared toolbar while visible: universal header + a back arrow. */
     private fun setupToolbar() {
-        setupUniversalHeader(title = getString(R.string.add_playlist), showBack = true)
+        setupUniversalHeader(
+            title = getString(R.string.add_playlist),
+            showBack = true,
+            showSearch = false,
+            showViewMode = false,
+            showSort = false,
+            onSettings = {
+                findNavController().navigate(R.id.action_addPlaylistFragment_to_settingsFragment)
+            }
+        )
     }
 
     /** Populates the exposed dropdown from [R.array.update_frequency_options], whose order matches [UpdateFrequency]. */
     private fun setupFrequencyDropdown() {
         val options = resources.getStringArray(R.array.update_frequency_options)
         binding.dropdownFrequency.setAdapter(
-            ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, options)
+            ArrayAdapter(requireContext(), R.layout.item_dropdown, options)
         )
         binding.dropdownFrequency.setText(options[selectedFrequency.ordinal], false)
         binding.dropdownFrequency.setOnItemClickListener { _, _, position, _ ->

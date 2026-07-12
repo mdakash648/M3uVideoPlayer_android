@@ -105,7 +105,16 @@ class EditPlaylistFragment : Fragment() {
     }
 
     private fun setupToolbar() {
-        setupUniversalHeader(title = getString(R.string.edit_playlist), showBack = true)
+        setupUniversalHeader(
+            title = getString(R.string.edit_playlist),
+            showBack = true,
+            showSearch = false,
+            showViewMode = false,
+            showSort = false,
+            onSettings = {
+                findNavController().navigate(R.id.action_editPlaylistFragment_to_settingsFragment)
+            }
+        )
     }
 
     /** File re-attachment isn't part of editing; only the URL / credentials / name / frequency are. */
@@ -135,7 +144,7 @@ class EditPlaylistFragment : Fragment() {
         selectedFrequency = initial
         val options = resources.getStringArray(R.array.update_frequency_options)
         binding.dropdownFrequency.setAdapter(
-            ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, options)
+            ArrayAdapter(requireContext(), R.layout.item_dropdown, options)
         )
         binding.dropdownFrequency.setText(options[selectedFrequency.ordinal], false)
         binding.dropdownFrequency.setOnItemClickListener { _, _, position, _ ->

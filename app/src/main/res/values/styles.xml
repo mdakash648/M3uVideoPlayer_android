@@ -30,8 +30,9 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginBottom">12dp</item>
-        <item name="boxStrokeColor">@color/televizo_divider</item>
-        <item name="hintTextColor">@color/televizo_text_secondary</item>
+        <item name="boxStrokeColor">@color/sl_edittext_stroke</item>
+        <item name="hintTextColor">@color/televizo_accent</item>
+        <item name="android:textColorHint">@color/televizo_text_secondary</item>
         <item name="boxStrokeWidthFocused">2dp</item>
         <item name="boxCornerRadiusTopStart">12dp</item>
         <item name="boxCornerRadiusTopEnd">12dp</item>
@@ -43,6 +44,8 @@
     <style name="AddPlaylist.Button.Toggle" parent="Widget.MaterialComponents.Button.OutlinedButton">
         <!-- Colors are inherited from ThemeOverlay.AddPlaylist.Accent applied to the ToggleGroup -->
         <item name="rippleColor">@color/televizo_accent</item>
+        <item name="strokeColor">@color/sl_button_stroke</item>
+        <item name="strokeWidth">2dp</item>
     </style>
 
     <style name="AddPlaylist.Button.Attach" parent="Widget.MaterialComponents.Button.OutlinedButton">
