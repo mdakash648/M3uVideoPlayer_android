@@ -7,6 +7,7 @@ import com.mdaksh.m3uvideoplayer.domain.model.Playlist
 import com.mdaksh.m3uvideoplayer.domain.model.PlaylistResumeTarget
 import com.mdaksh.m3uvideoplayer.domain.usecase.ClearPlaylistResumePointUseCase
 import com.mdaksh.m3uvideoplayer.domain.usecase.DeletePlaylistUseCase
+import com.mdaksh.m3uvideoplayer.domain.usecase.GetChannelsForPlaylistUseCase
 import com.mdaksh.m3uvideoplayer.domain.usecase.GetPlaylistsUseCase
 import com.mdaksh.m3uvideoplayer.domain.usecase.ObservePlaylistResumeTargetsUseCase
 import com.mdaksh.m3uvideoplayer.domain.usecase.SyncPlaylistUseCase
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,6 +28,7 @@ import javax.inject.Inject
 class PlaylistViewModel @Inject constructor(
     getPlaylistsUseCase: GetPlaylistsUseCase,
     observePlaylistResumeTargetsUseCase: ObservePlaylistResumeTargetsUseCase,
+    private val getChannelsForPlaylistUseCase: GetChannelsForPlaylistUseCase,
     private val deletePlaylistUseCase: DeletePlaylistUseCase,
     private val syncPlaylistUseCase: SyncPlaylistUseCase,
     private val clearPlaylistResumePointUseCase: ClearPlaylistResumePointUseCase,
@@ -38,6 +41,22 @@ class PlaylistViewModel @Inject constructor(
     /** Floating Resume Button engine — playlistId -> active resume target, for the list-item icon. */
     val resumeTargets: StateFlow<Map<Long, PlaylistResumeTarget>> = observePlaylistResumeTargetsUseCase()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /**
+     * [FIX] Resume Queue Builder — same as GroupListViewModel.buildResumeQueue().
+     * Fetches all channels in the same group (folder) as the resume target so the player
+     * launches with a full Next/Previous queue instead of a single isolated item.
+     */
+    suspend fun buildResumeQueue(
+        target: PlaylistResumeTarget
+    ): Pair<List<com.mdaksh.m3uvideoplayer.domain.model.Channel>, Int> {
+        val groupName = target.channel.group.ifBlank { null }
+        val groupChannels = getChannelsForPlaylistUseCase(target.playlistId, groupName)
+            .first()
+            .sortedBy { it.position }
+        val startIndex = groupChannels.indexOfFirst { it.id == target.channel.id }.coerceAtLeast(0)
+        return Pair(groupChannels.ifEmpty { listOf(target.channel) }, startIndex)
+    }
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()

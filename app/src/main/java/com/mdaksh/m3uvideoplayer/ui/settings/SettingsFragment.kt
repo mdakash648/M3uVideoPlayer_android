@@ -68,7 +68,11 @@ class SettingsFragment : Fragment() {
         btnGridColumnsPlus.setOnClickListener { viewModel.incrementGridColumns() }
         btnPosterColumnsMinus.setOnClickListener { viewModel.decrementPosterColumns() }
         btnPosterColumnsPlus.setOnClickListener { viewModel.incrementPosterColumns() }
-
+        btnControlsTimeoutMinus.setOnClickListener { viewModel.decrementControlsTimeout() }
+        btnControlsTimeoutPlus.setOnClickListener { viewModel.incrementControlsTimeout() }
+        btnSwipeSensitivityMinus.setOnClickListener { viewModel.decrementSwipeSensitivity() }
+        btnSwipeSensitivityPlus.setOnClickListener { viewModel.incrementSwipeSensitivity() }
+ 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
@@ -85,6 +89,20 @@ class SettingsFragment : Fragment() {
                         setStepperEnabled(btnPosterColumnsPlus, !SettingsViewModel.isAtMax(count))
                     }
                 }
+                launch {
+                    viewModel.controlsTimeoutMs.collect { timeoutMs ->
+                        textControlsTimeoutValue.text = timeoutLabel(timeoutMs)
+                        setStepperEnabled(btnControlsTimeoutMinus, !SettingsViewModel.isAtControlsTimeoutMin(timeoutMs))
+                        setStepperEnabled(btnControlsTimeoutPlus, !SettingsViewModel.isAtControlsTimeoutMax(timeoutMs))
+                    }
+                }
+                launch {
+                    viewModel.swipeSensitivityPercent.collect { percent ->
+                        textSwipeSensitivityValue.text = "$percent%"
+                        setStepperEnabled(btnSwipeSensitivityMinus, !SettingsViewModel.isAtSwipeSensitivityMin(percent))
+                        setStepperEnabled(btnSwipeSensitivityPlus, !SettingsViewModel.isAtSwipeSensitivityMax(percent))
+                    }
+                }
             }
         }
     }
@@ -92,6 +110,12 @@ class SettingsFragment : Fragment() {
     /** "Auto" for the responsive default, otherwise the plain column number. */
     private fun columnLabel(count: Int): String =
         if (count == COLUMN_COUNT_AUTO) getString(R.string.column_count_auto) else count.toString()
+
+    /** Formats milliseconds to seconds representation (e.g. 3500 -> "3.5s"). */
+    private fun timeoutLabel(timeoutMs: Int): String {
+        val seconds = timeoutMs.toFloat() / 1000f
+        return String.format(java.util.Locale.US, "%.1fs", seconds)
+    }
 
     /** Dims a stepper button to read as disabled once its end of the ladder is reached. */
     private fun setStepperEnabled(button: View, enabled: Boolean) {

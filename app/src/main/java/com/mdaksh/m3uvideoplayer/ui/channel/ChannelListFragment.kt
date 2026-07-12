@@ -38,11 +38,18 @@ class ChannelListFragment : Fragment() {
     private val toolbar: MaterialToolbar
         get() = requireActivity().findViewById(R.id.toolbar)
 
-    /** Title shown in the shared toolbar: "Favorite", the group name, or "All channels". */
+    /** Title shown in the shared toolbar: "Favorite", the group name, "All Series", or "All channels"/"All Movies". */
     private val screenTitle: String
         get() = when {
             viewModel.favoritesOnly -> getString(R.string.favorite)
+            viewModel.contentFilter.equals("SERIES", ignoreCase = true) && viewModel.groupName != null ->
+                viewModel.groupName!! // series episode list: show the series folder name
+            viewModel.contentFilter.equals("SERIES", ignoreCase = true) ->
+                getString(R.string.all_series) // All Series flat list
+            viewModel.contentFilter.equals("MOVIE", ignoreCase = true) ->
+                getString(R.string.all_movies)
             viewModel.groupName != null -> viewModel.groupName!!
+            viewModel.movieDominant.value -> getString(R.string.all_movies)
             else -> getString(R.string.all_channels)
         }
 
@@ -88,6 +95,11 @@ class ChannelListFragment : Fragment() {
                 }
                 launch {
                     viewModel.posterColumnCount.collect { reapplyColumns() }
+                }
+                // The movie-dominant signal loads async; refresh the toolbar title once it settles so
+                // the unfiltered all-channels screen reads "All Movies" to match the folder tile.
+                launch {
+                    viewModel.movieDominant.collect { toolbar.title = screenTitle }
                 }
             }
         }

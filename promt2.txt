@@ -1,0 +1,28 @@
+[PERFORMANCE TUNING] Eliminate Chunk Transition Lag & Micro-Stutters in Live TV Playback
+
+1. TARGET SYSTEM
+   └── ENGINE : LibVLC Media Player Configuration for Live Streams (`isLive == 1`).
+
+2. THE PROBLEM (Chunk-Gap Lag)
+   ├── BEHAVIOR : Live TV channels play fine for a while, but freeze/stutter for ~1 second at every chunk/segment boundary before resuming. 
+   └── CAUSE : The current network-caching or live-caching buffer window is too tight, or the hardware/software demuxer is waiting too long to parse the next TS/HLS segment, causing a brief buffer underflow during chunk transitions.
+
+3. OPTIMIZATION REQUIREMENTS (Advanced LibVLC Options)
+
+   ■ ITEM A: EXPAND NETWORK & LIVE CACHING WINDOW
+     ├── ACTION : In `PlaybackBuffering.kt` (or your player arguments configuration), enforce larger, safer buffer thresholds specifically for Live Streams to absorb transition latency.
+     └── PARAMETERS :
+         ├── `--network-caching=8000` (Increase from 5000ms to 8000ms to keep 8 seconds of stream ahead).
+         ├── `--live-caching=6000`    (Increase live buffer to 6 seconds to handle erratic IPTV server responses).
+         └── `--file-caching=4000`    (Ensure local file caching is stable if any temporary local cache is used).
+
+   ■ ITEM B: TUNING THE HLS/DEMUX ENGINE FOR SEAMLESS TRANSITIONS
+     ├── ACTION : Add explicit LibVLC command-line/media configuration arguments to force seamless segment stitching and faster demuxing.
+     └── ARGUMENTS TO IMPLEMENT :
+         ├── `--clock-synchro=1` or `--clock-jitter=5000` (Compensates for unstable server clocks between chunk handshakes).
+         ├── `--hls-adaptive-bitrate` (Ensure adaptive bitrate is configured to fluidly downscale quality instead of freezing the frame if a chunk is late).
+         ├── `:demux=ts` or `:demux=hls` (Explicitly force the demuxer framework to avoid auto-detect overhead at segment changes).
+         └── `--adaptive-logic=highest` or `--adaptive-logic=near-optimal` (Tells VLC to intelligently pre-buffer segments based on current download speed).
+
+   ■ ITEM C: REFACTOR PLAYER INVOCATION
+     └── Please check where `mediaPlayer.setMedia()` or `IMedia.addOption()` is called for live streams. Inject these high-performance caching and adaptive options into the live stream initialization path so they apply directly before the playback pipeline begins.

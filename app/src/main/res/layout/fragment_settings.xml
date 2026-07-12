@@ -262,5 +262,144 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- ===================== PLAYBACK (auto-hide timeout) ===================== -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/settings_section_playback"
+            android:textAllCaps="true"
+            android:textColor="@color/televizo_accent"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <!-- Controller auto-hide timeout stepper -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Settings.MenuCard"
+            android:clickable="false"
+            android:focusable="false">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@android:drawable/ic_lock_idle_alarm"
+                    app:tint="@color/televizo_accent" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_controls_timeout"
+                        android:textColor="@color/televizo_text_primary"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/settings_controls_timeout_subtitle"
+                        android:textColor="@color/televizo_text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <ImageButton
+                    android:id="@+id/btnControlsTimeoutMinus"
+                    style="@style/Settings.Stepper.Button"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_remove" />
+
+                <TextView
+                    android:id="@+id/textControlsTimeoutValue"
+                    style="@style/Settings.Stepper.Value"
+                    tools:text="3.5s" />
+
+                <ImageButton
+                    android:id="@+id/btnControlsTimeoutPlus"
+                    style="@style/Settings.Stepper.Button"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_add" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Swipe Seek Sensitivity stepper -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Settings.MenuCard"
+            android:clickable="false"
+            android:focusable="false">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="12dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_view_mode"
+                    app:tint="@color/televizo_accent" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_swipe_sensitivity"
+                        android:textColor="@color/televizo_text_primary"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/settings_swipe_sensitivity_subtitle"
+                        android:textColor="@color/televizo_text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <ImageButton
+                    android:id="@+id/btnSwipeSensitivityMinus"
+                    style="@style/Settings.Stepper.Button"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_remove" />
+
+                <TextView
+                    android:id="@+id/textSwipeSensitivityValue"
+                    style="@style/Settings.Stepper.Value"
+                    tools:text="100%" />
+
+                <ImageButton
+                    android:id="@+id/btnSwipeSensitivityPlus"
+                    style="@style/Settings.Stepper.Button"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_add" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
     </LinearLayout>
 </ScrollView>

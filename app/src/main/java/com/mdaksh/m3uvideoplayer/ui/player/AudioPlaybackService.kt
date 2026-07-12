@@ -7,32 +7,41 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.LoadControl
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.mdaksh.m3uvideoplayer.R
 import dagger.hilt.android.AndroidEntryPoint
-import org.videolan.libvlc.LibVLC
-import org.videolan.libvlc.Media
-import org.videolan.libvlc.MediaPlayer
 import javax.inject.Inject
 
 /**
  * Step 10.5 — "Play as Audio" / background playback.
  *
  * A foreground service that keeps the stream playing (audio-only) after the user leaves
- * [PlayerActivity]. It owns its own [MediaPlayer] built on the injected app-wide [LibVLC] engine —
- * no video output is attached, so only the audio track is decoded — and posts a media-style
- * notification with a play/pause and a stop action so playback is controllable from the shade.
+ * [PlayerActivity]. Media3 migration — it owns its own [ExoPlayer] with the video track disabled,
+ * so only the audio track is decoded — and posts a media-style notification with a play/pause and
+ * a stop action so playback is controllable from the shade.
  */
+@UnstableApi
 @AndroidEntryPoint
 class AudioPlaybackService : Service() {
 
+    /** Media3 migration — ExoPlayer HTTP stack + buffering policy, shared from PlayerModule. */
     @Inject
-    lateinit var libVlc: LibVLC
+    lateinit var mediaDataSourceFactory: DataSource.Factory
 
-    private var mediaPlayer: MediaPlayer? = null
+    @Inject
+    lateinit var loadControl: LoadControl
+
+    private var player: ExoPlayer? = null
     private var title: String = ""
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -59,25 +68,29 @@ class AudioPlaybackService : Service() {
         title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         val startPosition = intent.getLongExtra(EXTRA_POSITION, 0L)
 
-        mediaPlayer = MediaPlayer(libVlc).also { player ->
-            val media = Media(libVlc, Uri.parse(url)).apply {
-                // Audio only — tell the decoder not to bother with the video track.
-                addOption(":no-video")
-                addOption(":network-caching=1500")
+        // Media3 migration — ExoPlayer with the video track disabled (audio-only background playback).
+        // The injected LoadControl gives it the same generous live buffering as the foreground path.
+        player = ExoPlayer.Builder(this)
+            .setLoadControl(loadControl)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(mediaDataSourceFactory))
+            .build()
+            .also { exo ->
+                exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                    .build()
+                exo.setMediaItem(MediaItem.fromUri(url))
+                if (startPosition > 0L) exo.seekTo(startPosition)
+                exo.playWhenReady = true
+                exo.prepare()
             }
-            player.media = media
-            media.release()
-            player.play()
-            if (startPosition > 0L) player.time = startPosition
-        }
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
     }
 
     private fun togglePlayPause() {
-        mediaPlayer?.let { player ->
-            if (player.isPlaying) player.pause() else player.play()
+        player?.let { p ->
+            if (p.isPlaying) p.pause() else p.play()
         }
         notifyManager().notify(NOTIFICATION_ID, buildNotification())
     }
@@ -85,7 +98,7 @@ class AudioPlaybackService : Service() {
     // --- Notification -------------------------------------------------------------------------
 
     private fun buildNotification(): Notification {
-        val playing = mediaPlayer?.isPlaying == true
+        val playing = player?.isPlaying == true
         val playPauseIcon = if (playing) R.drawable.ic_pause else R.drawable.ic_play
 
         val contentIntent = PendingIntent.getActivity(
@@ -127,11 +140,8 @@ class AudioPlaybackService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        mediaPlayer?.let { player ->
-            player.stop()
-            player.release()
-        }
-        mediaPlayer = null
+        player?.release()
+        player = null
     }
 
     companion object {
@@ -144,13 +154,22 @@ class AudioPlaybackService : Service() {
         private const val EXTRA_URL = "extra_url"
         private const val EXTRA_TITLE = "extra_title"
         private const val EXTRA_POSITION = "extra_position"
+        // promt2 — Live/VOD hint so background playback picks the same buffering profile as the UI.
+        private const val EXTRA_IS_LIVE = "extra_is_live"
 
         /** Intent that starts audio-only background playback of [url] from [positionMs]. */
-        fun startIntent(context: Context, url: String, title: String, positionMs: Long): Intent =
+        fun startIntent(
+            context: Context,
+            url: String,
+            title: String,
+            positionMs: Long,
+            isLive: Boolean = true
+        ): Intent =
             Intent(context, AudioPlaybackService::class.java)
                 .putExtra(EXTRA_URL, url)
                 .putExtra(EXTRA_TITLE, title)
                 .putExtra(EXTRA_POSITION, positionMs)
+                .putExtra(EXTRA_IS_LIVE, isLive)
 
         fun stopIntent(context: Context): Intent =
             Intent(context, AudioPlaybackService::class.java).setAction(ACTION_STOP)

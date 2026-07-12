@@ -1,45 +1,99 @@
 package com.mdaksh.m3uvideoplayer.di
 
 import android.content.Context
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.LoadControl
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.OkHttpClient
 import org.videolan.libvlc.LibVLC
+import javax.inject.Named
 import javax.inject.Singleton
 
 /**
- * Step 9.2 — provides the single, process-wide LibVLC [LibVLC] engine instance via Hilt.
+ * Media3 migration — process-wide playback engine wiring.
  *
- * `LibVLC` is expensive to create and owns native resources, so exactly one is shared for the whole
- * app (`@Singleton`); each [org.videolan.libvlc.MediaPlayer] is cheap and created per-[PlayerActivity]
- * on top of it. The option list is where the engine-wide flags live:
+ * PRIMARY engine is **Media3 / ExoPlayer**. ExoPlayer itself is cheap and lifecycle-bound, so it is
+ * built per-[com.mdaksh.m3uvideoplayer.ui.player.PlayerActivity]; this module provides the expensive
+ * / shared pieces it needs:
  *
- *  - **Step 9.5:** `--avcodec-hw=any` turns on hardware-accelerated decoding, which is what makes
- *    4K/8K streams playable on real devices. `--avcodec-fast`/`--avcodec-skiploopfilter` shave
- *    decode cost further for high-bitrate content.
- *  - **Step 9.4:** the digital audio amplifier is enabled here so the player can push gain past 100%
- *    (up to a 200% boost) at playback time via `MediaPlayer.setVolume`.
+ *  - **[LoadControl]** — the buffering policy. This REPLACES the old LibVLC `:network-caching` knobs
+ *    (the former `PlaybackBuffering.kt`). ExoPlayer's LoadControl is what does the YouTube-style
+ *    forward buffering + rolling eviction natively, so the hand-rolled HLS proxy is no longer needed.
+ *  - **[DataSource.Factory]** — HTTP stack for media, backed by the app's shared [OkHttpClient] so
+ *    per-stream `#EXTVLCOPT` headers (Referer / User-Agent) can be attached the same way as before.
+ *
+ * FALLBACK engine is **LibVLC**, kept for streams ExoPlayer can't open (exotic codecs / containers).
+ * It is expensive to create and owns native resources, so exactly one is shared (`@Singleton`),
+ * qualified `@Named("vlc")`. A [org.videolan.libvlc.MediaPlayer] on top of it is built lazily by the
+ * activity only if a fallback actually happens.
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object PlayerModule {
 
+    // --- Media3 / ExoPlayer building blocks ---------------------------------------------------
+
+    /**
+     * Buffering policy for live IPTV + VOD. Generous forward buffer so the decoder never underflows
+     * at an HLS/TS segment boundary (the promt2 "chunk-gap lag" problem), while `startPlayback`/
+     * `rebuffer` thresholds stay low so channels start fast. This is ExoPlayer's native equivalent of
+     * the old `network-caching=8000 / live-caching=6000` values, done at the buffer layer.
+     */
     @Provides
     @Singleton
+    @UnstableApi
+    fun provideLoadControl(): LoadControl =
+        DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 15_000,      // keep up to 15s buffered ahead
+                /* maxBufferMs = */ 60_000,      // allow up to 60s on good networks
+                /* bufferForPlaybackMs = */ 2_500,           // ~2.5s buffered before first frame
+                /* bufferForPlaybackAfterRebufferMs = */ 5_000 // 5s after a stall before resuming
+            )
+            .setPrioritizeTimeOverSizeThresholds(true) // favour target duration over a byte cap for live
+            .build()
+
+    /**
+     * Media HTTP data source backed by the shared OkHttp client. [OkHttpDataSource] lets the player
+     * fetch playlists/segments through the same stack (and TLS/proxy config) as the rest of the app;
+     * per-request headers are set at load time in the activity.
+     */
+    @Provides
+    @Singleton
+    @UnstableApi
+    fun provideMediaDataSourceFactory(
+        @ApplicationContext context: Context,
+        okHttpClient: OkHttpClient
+    ): DataSource.Factory {
+        val http = OkHttpDataSource.Factory(okHttpClient)
+        // DefaultDataSource wraps the HTTP factory so local (file/content) URIs also work — e.g. the
+        // audio-only hand-off or any temporary local cache.
+        return DefaultDataSource.Factory(context, http)
+    }
+
+    // --- LibVLC fallback engine ---------------------------------------------------------------
+
+    /**
+     * The single shared LibVLC engine, used ONLY when ExoPlayer fails on a stream. `--avcodec-hw=any`
+     * enables hardware decoding; `--audio-time-stretch` keeps pitch natural during speed changes.
+     */
+    @Provides
+    @Singleton
+    @Named("vlc")
     fun provideLibVlc(@ApplicationContext context: Context): LibVLC {
         val options = arrayListOf(
-            // --- Step 9.5: hardware acceleration for 4K/8K ---
-            "--avcodec-hw=any",       // use any available hardware decoder (MediaCodec on Android)
-            "--avcodec-fast",         // allow speed-optimised (slightly less accurate) decoding
+            "--avcodec-hw=any",
+            "--avcodec-fast",
             "--avcodec-skiploopfilter=all",
-            "--network-caching=1500", // 1.5s buffer — smoother live IPTV over flaky networks
-
-            // --- Step 9.4: digital audio amplifier (allows >100% volume) ---
-            "--audio-time-stretch",   // keep pitch natural when boosting/altering audio
-
-            // Keep the native log readable during bring-up; drop to "0" for release.
+            "--audio-time-stretch",
             "-vv"
         )
         return LibVLC(context, options)

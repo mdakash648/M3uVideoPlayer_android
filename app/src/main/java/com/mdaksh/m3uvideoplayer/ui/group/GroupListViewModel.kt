@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -25,16 +26,54 @@ import javax.inject.Inject
 @HiltViewModel
 class GroupListViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    getChannelsForPlaylistUseCase: GetChannelsForPlaylistUseCase,
+    private val getChannelsForPlaylistUseCase: GetChannelsForPlaylistUseCase,
     observePlaylistResumeTargetsUseCase: ObservePlaylistResumeTargetsUseCase,
     private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
     val playlistId: Long = savedStateHandle.get<Long>("playlistId") ?: 0L
 
-    /** Shared source for both the folder tiles and the search index — collected once. */
+    /**
+     * All Series sub-screen flag. When true this screen shows only per-series folders (SERIES
+     * channels grouped by group-title) with no pinned tiles and no sort — see [buildGroupItems].
+     */
+    val seriesOnly: Boolean = savedStateHandle.get<Boolean>("seriesOnly") ?: false
+
+    /**
+     * Shared source for both the folder tiles and the search index — collected once. In the All
+     * Series sub-screen this is pre-filtered to SERIES content so every derived view (folders +
+     * search) is scoped to series only.
+     */
     private val channels = getChannelsForPlaylistUseCase(playlistId)
+        .map { list ->
+            if (seriesOnly) {
+                list.filter {
+                    it.contentType == com.mdaksh.m3uvideoplayer.domain.model.ContentType.SERIES
+                }
+            } else {
+                list
+            }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Resume Queue Builder — fetches the channels for the same folder (group) as the resume
+     * target in one shot, so the player can be launched with a full Next/Previous queue instead
+     * of a single isolated item.
+     *
+     * @return Pair of (orderedQueue, startIndex) where startIndex points to [target.channel].
+     *         Falls back to a single-item list if the group cannot be resolved.
+     */
+    suspend fun buildResumeQueue(
+        target: com.mdaksh.m3uvideoplayer.domain.model.PlaylistResumeTarget
+    ): Pair<List<com.mdaksh.m3uvideoplayer.domain.model.Channel>, Int> {
+        val groupName = target.channel.group.ifBlank { null }
+        val groupChannels = getChannelsForPlaylistUseCase(playlistId, groupName)
+            .first()
+            .sortedBy { it.position }
+        val startIndex = groupChannels.indexOfFirst { it.id == target.channel.id }.coerceAtLeast(0)
+        return Pair(groupChannels.ifEmpty { listOf(target.channel) }, startIndex)
+    }
 
     /**
      * Folder Resume FAB — this playlist's single "continue watching" pointer, if any, from the
@@ -85,6 +124,17 @@ class GroupListViewModel @Inject constructor(
         order: FolderSortOrder
     ): List<GroupItem> {
         if (list.isEmpty()) return emptyList()
+
+        // All Series sub-screen: show only per-series folders (no pinned tiles, but sorted).
+        if (seriesOnly) {
+            val folders = list.toGroupItems()
+            return when (order) {
+                FolderSortOrder.ASCENDING -> folders.sortedBy { it.name.lowercase() }
+                FolderSortOrder.DESCENDING -> folders.sortedByDescending { it.name.lowercase() }
+                FolderSortOrder.PLAYLIST -> folders
+            }
+        }
+
         // groupBy preserves first-encounter key order, i.e. raw playlist order (channels arrive
         // sorted by position from the DAO), which is exactly FolderSortOrder.PLAYLIST.
         val folders = list.toGroupItems()
@@ -93,14 +143,41 @@ class GroupListViewModel @Inject constructor(
             FolderSortOrder.DESCENDING -> folders.sortedByDescending { it.name.lowercase() }
             FolderSortOrder.PLAYLIST -> folders
         }
-        val allChannels = GroupItem(name = "", channelCount = list.size, isAllChannels = true)
         val favorites = GroupItem(
             name = "",
             channelCount = list.count { it.isFavorite },
             isFavorites = true
         )
-        // Position 1: All channels, Position 2: Favorite — both pinned, ignoring the sort filter.
-        return listOf(allChannels, favorites) + sorted
+
+        return if (isMovieDominant(list)) {
+            // Movie/Series playlist: replace "All Channels" with two pinned tiles:
+            //   Position 1 = All Movies  (flat MOVIE list)
+            //   Position 2 = All Series  (series-folder sub-screen)
+            //   Position 3 = Favorite    (as before)
+            val allMovies = GroupItem(
+                name = "",
+                channelCount = list.count {
+                    it.contentType == com.mdaksh.m3uvideoplayer.domain.model.ContentType.MOVIE
+                },
+                isAllMovies = true
+            )
+            val allSeries = GroupItem(
+                name = "",
+                channelCount = list.count {
+                    it.contentType == com.mdaksh.m3uvideoplayer.domain.model.ContentType.SERIES
+                },
+                isAllSeries = true
+            )
+            listOf(allMovies, allSeries, favorites) + sorted
+        } else {
+            // Regular playlist: keep original layout (All Channels, Favorite, folders).
+            val allChannels = GroupItem(
+                name = "",
+                channelCount = list.size,
+                isAllChannels = true
+            )
+            listOf(allChannels, favorites) + sorted
+        }
     }
 
     // --- Global search (within this playlist) ------------------------------------------------
@@ -150,8 +227,28 @@ class GroupListViewModel @Inject constructor(
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /**
+     * True when at least [MOVIE_DOMINANT_FRACTION] (60%) of this playlist's channels are MOVIE or
+     * SERIES content — the signal that flips the pinned all-channels tile to read "All Movies".
+     */
+    private fun isMovieDominant(
+        list: List<com.mdaksh.m3uvideoplayer.domain.model.Channel>
+    ): Boolean {
+        if (list.isEmpty()) return false
+        val movieOrSeries = list.count {
+            it.contentType == com.mdaksh.m3uvideoplayer.domain.model.ContentType.MOVIE ||
+                it.contentType == com.mdaksh.m3uvideoplayer.domain.model.ContentType.SERIES
+        }
+        return movieOrSeries.toFloat() / list.size >= MOVIE_DOMINANT_FRACTION
+    }
+
     /** Real (non-synthetic) folder tiles in raw playlist (first-appearance) order. Callers apply sorting. */
     private fun List<com.mdaksh.m3uvideoplayer.domain.model.Channel>.toGroupItems(): List<GroupItem> =
         groupBy { it.group.ifBlank { "Uncategorized" } }
             .map { (name, channelsInGroup) -> GroupItem(name, channelsInGroup.size) }
+
+    private companion object {
+        /** ≥60% MOVIE/SERIES content relabels the all-channels tile as "All Movies". */
+        const val MOVIE_DOMINANT_FRACTION = 0.6f
+    }
 }

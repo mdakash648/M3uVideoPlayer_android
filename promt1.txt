@@ -1,14 +1,616 @@
-[UI/UX UPDATE] Optimize Horizontal Margins for Playlist Screen Rows
+> televizo app ar vitore kon tecknology use kora hoiche ? ei app ar vitore live tv smoothly cole without buffering and    freezing.
+● Good question — and the answer is directly relevant to what we just built. Let me verify the specifics rather than
+  guess.
 
-1. TARGET VIEW
-   └── SCREEN : Playlist Screen (RecyclerView / GridView Layout).
+● Web Search("Televizo IPTV player Android which player engine ExoPlayer VLC libVLC ijkplayer")
+  ⎿  Did 1 search in 21s
 
-2. DESIGN REFACTOR
-   ├── CURRENT ISSUE : The items/rows in the playlist are too close to the screen edges, causing content to look cramped and cut off on certain TV displays (overscan issues).
-   │
-   └── REQUIREMENT : Increase the Left and Right side margins/padding for each playlist item row.
-       ├── MOBILE CONFIG : Set horizontal padding to 16dp to 20dp for clean side spacing.
-       └── TV CONFIG     : Set horizontal padding to 48dp to 56dp (standard Android TV leanback spec) to keep content safely away from the physical screen borders.
+● আমি নেট থেকে যা যাচাই করলাম সেটা আগআমাদেপ্রজেক্সাথrelate করি।
 
-3. EXPECTED OUTCOME
-   └── A visually balanced, breathable, and scannable list layout that scales properly on both smartphone screens and large television panels.
+  Televizo আসলে কী দিয়ে বানানো — সৎ উত্তর
+
+  কোনো official source এটা confirm করে না। Televizo (package: com.ottplay.ottplay) এর নিজের Play Store লিস্টিং বা ডকুমেন্টেশন engine-এর
+  নামবলেনা।শুধএকটাSEO─article─দাবকরেএটাExoPlayer─ব্যবহাকরে—─কিন্ঐুarticle─টাAI-generated/unreliable─(একই─বয়লারপ্লাইনঅনেক ⏵⏵ accept edits on · 1 shell · esc to interrupt · ← for agents · ↓ to manage
+  app-এর জন্য কপি-পেস্ট করা), তাই ভরসা করা যায় না।
+
+  যেটপ্রানিশ্চিবেশিরভnative Android IPTV app-এর মতোTelevizo সম্ভবতExoPlayer (Media3) কেmain engine হিসেব্যবহাকরে,সাথে
+  libVLC আর external player (MX Player) fallback হিসেবTelevizo-র Settings-এ Decoder/Player selection menu আছে— ওখানে
+  "ExoPlayer / VLC / Auto" অপশন দেখলেআসল উত্তরপেযযাবেন।
+
+  কিন্আসল প্রশ্নTelevizo smooth কেন,buffering/freezing হয়নাকেন?
+
+  এখানtechnology-র নাম-টমূলকারণনা।মূলকারণহলোExoPlayer-এর architecture, যেটঠিকঐ জিনিযেটআমরাগত কয়েধাপআপনারapp-এ হাতবানালাম:
+
+  ┌───────────────────────────────────────────────────────────────┬─────────────────────────────────────────────────┐
+  │                    Televizo/ExoPlayer যাকরে                   │              আপনারapp-এ আমরাযাবানালাম           │
+  ├───────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ Segment-level buffering — প্রতিHLS .ts chunk আলাদাভদেখেনিন্তণর│ SlidingChunkCache — chunk index ধরে             │
+  │  করে                                                          │ prefetch/evict                                  │
+  ├───────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ Forward prefetch — সামনেকয়েকsegment আগেইdownload করেরাখে     │ prefetch K+1…K+4                                │
+  ├───────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ Load control (rolling buffer) — দেখহয়যাওযchunk মেমরথেকফেলদেয়│ < K-1 chunk delete করা                          │
+  ├───────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+  │ Adaptive bitrate — নেটslow হলেquality কমায়freeze করেনা       │ :adaptive-logic=predictive                      │
+  └───────────────────────────────────────────────────────────────┴─────────────────────────────────────────────────┘
+
+  অর্থাৎTelevizo smooth কারণExoPlayer নিজথেকেper-segment prefetch + rolling buffer করে।আর আপনারapp libVLC ব্যবহাকরে,যেটা  এই কাজটKotlin-এর কাছexpose করেনা— তাইআমাদেHLS proxy দিযহাতঐ একই behavior বানাহলো।
+
+  আপনারজন্যবড়সিদ্ধান্ত
+
+  এখন আপনারসামনদুইটরাস্তা:
+
+  1. libVLC + আমাদেproxy রাখ(এখন যাআছে)— কাজকরে,কিন্শুধ.m3u8 streams-এ, আর maintenance বেশি।
+  2. ExoPlayer/Media3-তেswitch করা— Televizo যাকরেঠিকসেটাbuilt-in। prefetch/rolling buffer/ABR সব automatic, proxy লাগনা।
+  কিন্এটাplayer engine পুরবদলান— বড়refactor।
+
+  আপনিকোনটচানজানাসেইঅনুযাএগোই।
+
+  Sources:
+  - Google Play – Televizo (https://play.google.com/store/apps/details?id=com.ottplay.ottplay)
+  - ijkplayer vs ExoPlayer vs VLC comparison
+  (https://www.mo4tech.com/ijkplayer-exoplayer-vlc-player-comprehensive-comparison.html)
+  - iptvforces.com – Android IPTV Players (https://iptvforces.com/android-iptv-player/) (unreliable — SEO content)
+
+✻ Cogitated for 1m 12s · 1 shell still running
+
+> "You have full access to my entire application codebase. Please analyze all the relevant files ( `PlayerActivity.kt`,   `AudioPlaybackService.kt`, `AppModule.kt`, `build.gradle.kts` etc).                                                                                                                                                                             I want to migrate my Android IPTV/Video Player application entirely from `LibVLC` to Google's modern `AndroidX Media3   (ExoPlayer)`. Perform the complete migration step-by-step." if you have any question then ask me. reply in banglish.
+● Bujhlam — pura LibVLC theke Media3 (ExoPlayer)-e migration. Eta boro kaj, tai age ami pura codebase-ta bhalo kore
+  analyze kori, tarpor important prosno gulo jiggesh korbo. Guess kore boro migration shuru korte chai na.
+
+     app/src/main/java/com/mdaksh/m3uvideoplayer/di/PlayerModule.kt
+     app/src/main/java/com/mdaksh/m3uvideoplayer/ui/channel/ChannelListFragment.kt
+     … +12 lines (ctrl+o to expand)
+
+● Let me look at the big files — PlayerActivity.kt is the main one (22 refs). Let me read it in full plus the others.
+
+  Read 1 file (ctrl+o to expand)
+
+● Let me read the whole PlayerActivity to understand every VLC touchpoint (events, tracks, gain, PiP, seek, etc.). It's
+  ~1800 lines. Let me grep the specific VLC API usages to be efficient.
+
+● Bash(cd "C:\Users\akash\AndroidStudioProjects\M3uVideoPlayer" && grep -n
+      "mediaPlayer\|libVlc\|MediaPlayer\.Event\|onPlayerEvent\|setVolume\|\.spuTracks\|\.audioTrac…)
+  ⎿  52:import org.videolan.libvlc.interfaces.IMedia
+     81:    lateinit var libVlc: LibVLC
+     98:    private var mediaPlayer: MediaPlayer? = null
+     … +82 lines (ctrl+o to expand)
+
+● Comprehensive integration. Let me check the layout XML (VLCVideoLayout is VLC-specific), the audio amplifier/volume
+  boost feature, and gradle setup.
+
+● Bash(cd "C:\Users\akash\AndroidStudioProjects\M3uVideoPlayer" && echo "===videoLayout in XML===" && grep -rn
+      "VLCVideoLayout\|videoLayout\|org.videolan" app/src/main…)
+  ⎿  ===videoLayout in XML===
+     4:    Step 9.1  — VLCVideoLayout hosts the LibVLC output; spinner + error text for load/error states.
+     21:    <!-- LibVLC renders the decoded video frames here; VLCVideoLayout manages the underlying
+     … +37 lines (ctrl+o to expand)
+
+● Bash(cd "C:\Users\akash\AndroidStudioProjects\M3uVideoPlayer" && echo "===gradle plugins/build files===" && ls              *.gradle* app/*.gradle* 2>/dev/null && echo "" && echo…)
+  ⎿  ===gradle plugins/build files===
+     app/build.gradle.kts
+     build.gradle.kts
+     … +82 lines (ctrl+o to expand)
+
+● I now have a complete picture of the migration scope. Let me summarize what I found, then ask the questions that
+  genuinely affect how I build this.
+
+  Ki ki migrate korte hobe (analysis)
+
+  LibVLC touchpoints:
+  - PlayerModule.kt — LibVLC singleton (HW decode, audio amp options)
+  - PlayerActivity.kt — main screen: MediaPlayer, event listener, tracks (audio/subtitle), player.time/length, rate
+  (speed), volume (0-200% gain), attachViews, surface recovery watchdog, D-pad seek
+  - AudioPlaybackService.kt — background audio service
+  - PlaybackBuffering.kt — LibVLC : options (network-caching etc.)
+  - activity_player.xml — VLCVideoLayout
+  - HlsProxyServer / SlidingChunkCache — amader banano custom HLS proxy
+  - build.gradle.kts + libs.versions.toml — libvlc-all dependency
+
+  Boro impact: Media3-te ExoPlayer nijei segment-prefetch + rolling buffer + adaptive bitrate kore (LoadControl) — ei
+  karonei Televizo smooth. Tar mane amader HLS proxy (SlidingChunkCache/HlsProxyServer) migration-e ar dorkar nei —
+  ExoPlayer built-in eta kore. Eta boro simplification.
+
+  Ekhon amake koyekta jinis clear korte hobe, karon egulor upor migration-er approach nirbhor kore:
+
+● User answered Claude's questions:
+  ⎿  · Migration er por LibVLC ki puropuri baad diye debo, naki fallback hisebe rekhe debo? → ExoPlayer main + VLC
+     fallback
+     · Amader banano HLS sliding-chunk proxy (HlsProxyServer/SlidingChunkCache) er ki hobe? → Delete kore dao
+     (recommended)
+     · 0-200% volume boost feature (100% er upore software gain) ki rakhte hobe? → Rakho (LoudnessEnhancer diye)
+     · Migration kivabe deliver korbo? → Step-by-step (recommended)
+
+● Ekta guruttopurno point clear kore ni, karon apni je duita choose korechen — "ExoPlayer main + VLC fallback" — eta
+  shobcheye boro architecture. ETar mane holo ekta abstraction layer bananor jekhane duita engine thakbe. Amake bujhte
+  hobe fallback ta koto "full" hobe. Aro koyekta core file pori age.
+
+  Read 1 file (ctrl+o to expand)
+
+● Let me check the track-selection dialog and aspect-ratio logic (VLC-specific APIs needing Media3 equivalents), plus
+  the audio service.
+
+  Read 1 file (ctrl+o to expand)
+
+● I have a thorough understanding now. Let me look at aspect-ratio toggle and the audio service quickly, then I'll write  the plan.
+
+● Bash(cd "C:\Users\akash\AndroidStudioProjects\M3uVideoPlayer" && echo "===aspect ratio toggle===" && grep -n
+      "toggleAspectRatio\|setAspectRatio\|setScale\|aspectRati…)
+  ⎿  ===aspect ratio toggle===
+     696:        btnFullscreen.setOnClickListener { toggleAspectRatio() }
+     870:    private fun toggleAspectRatio() {
+     … +7 lines (ctrl+o to expand)
+
+● I have a complete picture now. Let me present the migration plan.
+
+  Analysis complete — ja pelam
+
+  LibVLC ja ja kaje ache:
+  - PlayerModule.kt — LibVLC singleton
+  - PlayerActivity.kt (~1900 lines) — main player: events, tracks, seek (player.time/length), speed (rate), volume/gain   (0-200%), attachViews, aspect-ratio (videoScale), live surface-recovery watchdog, D-pad seek
+  - AudioPlaybackService.kt — background audio
+  - PlaybackBuffering.kt + HLS proxy (HlsProxyServer/SlidingChunkCache)
+  - activity_player.xml — VLCVideoLayout
+  - gradle — libvlc-all
+
+  Apnar choices: ExoPlayer main + VLC fallback · proxy delete · volume boost rakho (LoudnessEnhancer) · step-by-step.
+
+  Ekhon plan-mode-e detail plan likhi.
+
+● Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+● I have everything I need. Let me lay out the migration plan.
+
+  Migration Plan: LibVLC → Media3 (ExoPlayer), VLC fallback রেখে
+
+  Architecture: dual-engine
+
+  ExoPlayer primary, VLC fallback। ExoPlayer যখন কোনো stream-এ fatal error দেয় (unsupported codec/container — যেমন কিছ   RTSP/exotic TS), তখন automatic ঐ same URL VLC-তে re-load হবে। দুই engine এcontainer-এ কাজকরবে।
+
+  Step 1 — Gradle + dependencies
+
+  - libs.versions.toml: media3 version যোগ(1.4.1)। libvlc রাখব(fallback)।
+  - Media3 modules: exoplayer, exoplayer-hls, ui, session (background/notification), datasource-okhttp (existing OkHttp
+  + headers reuse)।
+
+  Step 2 — Layout
+
+  - activity_player.xml: VLCVideoLayout → একটাFrameLayout container যাতExoPlayer-এর PlayerView (default) আর দরকারহলে
+  VLC-র surface দুটোবসানযায়।
+
+  Step 3 — DI (PlayerModule.kt)
+
+  - ExoPlayer-এর জন্য:OkHttp DataSource.Factory (referrer/user-agent headers এখানেই)DefaultLoadControl (buffer tuning —
+  এটাইআমাদেপুরনcaching-এর replacement, এবংExoPlayer এখানেsegment-prefetch + rolling buffer করে,তাইproxy লাগনা)।
+  - VLC singleton @Named("vlc") হিসেরাখবfallback-এর জন্য।
+
+  Step 4 — Core player abstraction
+
+  - ছোটএকটাinternal helper: EngineController — active engine (EXO/VLC) track করে,
+  play/pause/seek/position/tracks/speed/volume delegate করে।PlayerActivity এর সব feature এর মধ্যদিযযাবেতাইfallback-এ
+  switch করলেUI code বদলাতহবেনা।
+
+  Step 5 — PlayerActivity migration (সবচেযবড়ধাপ)
+
+  প্রতিVLC API → Media3 mapping:
+
+  ┌───────────────────┬───────────────────────┬─────────────────────────────────────────────────────────────────────┐
+  │      Feature      │          VLC          │                               Media3                                │
+  ├───────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ Events            │ MediaPlayer.Event     │ Player.Listener (onPlaybackStateChanged, onPlayerError,             │
+  │                   │                       │ onIsPlayingChanged)                                                 │
+  ├───────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ Seek/position     │ player.time/length    │ currentPosition/duration/seekTo                                     │
+  ├───────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ Speed             │ player.rate           │ setPlaybackSpeed                                                    │
+  ├───────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ Tracks            │ audioTracks/spuTracks │ Tracks + TrackSelectionParameters                                   │
+  │ (audio/sub)       │                       │                                                                     │
+  ├───────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ Aspect ratio      │ videoScale            │ PlayerView.resizeMode                                               │
+  ├───────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ Volume 0-100%     │ hardware + VLC volume │ hardware stream volume                                              │
+  ├───────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ Volume 101-200%   │ VLC internal gain     │ LoudnessEnhancer (audioSessionId থেকে)                              │
+  ├───────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ Live              │ length <= 0           │ isCurrentMediaItemLive                                              │
+  ├───────────────────┼───────────────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ Surface recovery  │ detach/attach         │ ExoPlayer auto-recovers; VLC fallback trigger on error              │
+  │                   │ watchdog              │                                                                     │
+  └───────────────────┴───────────────────────┴─────────────────────────────────────────────────────────────────────┘
+
+  - Fallback logic: onPlayerError → VLC engine-এ same URL load → EngineController switch।
+
+  Step 6 — AudioPlaybackService
+
+  - VLC MediaPlayer → ExoPlayer (:no-video এর বদলেaudio-only track selection)।
+
+  Step 7 — Cleanup
+
+  - HlsProxyServer.kt, SlidingChunkCache.kt, HlsSource.kt, M3u8Rewriter.kt delete।
+  - PlaybackBuffering.kt → ExoPlayer LoadControl config-এ পরিণত(VLC options বাদ)।
+
+  প্রতধাপcompile করেverify করব।
+
+  সৎ কথা/ risks
+
+  - এটাবড়migration — PlayerActivity প্রাপুরplayer-logic অংশrewrite হবে(~600-800 lines touched)। আমিstep-by-step compile  করেযাব,কিন্আসল device-এ IPTV stream দিযআপনাকtest করতেহবে— আমারকাছstream/device নেই।
+  - Dual-engine মানmaintenance দুইengine-এর। Fallback আমিcore playback (play/pause/seek/tracks/speed) পর্যন্করব;
+  PiP/gain এর মতোadvanced feature fallback mode-এ best-effort।
+  - 0-200% gain LibVLC-তেযত মসৃণছিল,LoudnessEnhancer-এ ততটানাওহতেপার(Android API-র সীমা)।
+
+  Ekta cheq: fallback-er "depth" niye — apni ki chan?
+
+● User answered Claude's questions:
+  ⎿  · VLC fallback koto "gobhir" hobe? (ei ta migration er size onek bodlay) → Core playback only (recommended)             · Media3 er sathe automatic error-fallback trigger korbo, naki user manual switch korbe? → Automatic (recommended)
+
+● Sob clear. Final plan:
+
+  Locked decisions: ExoPlayer main + VLC fallback (core playback only) · automatic error-fallback · proxy delete ·
+  volume boost via LoudnessEnhancer · step-by-step delivery.
+
+  Final Migration Plan
+
+  Step 1 — Gradle: Media3 1.4.1 (exoplayer, exoplayer-hls, ui, session, datasource-okhttp) যোগ;libvlc fallback-এর জন্য
+  রাখা।
+
+  Step 2 — Layout: VLCVideoLayout → FrameLayout (ExoPlayer PlayerView + VLC surface দুটোজন্য)।
+
+  Step 3 — DI: ExoPlayer factory (OkHttp DataSource + headers + LoadControl buffer tuning); VLC singleton @Named("vlc")
+  fallback।
+
+  Step 4 — EngineController: active engine track করেplay/pause/seek/tracks/speed/volume delegate করে;UI code
+  engine-agnostic থাকেonPlayerError → auto VLC fallback।
+
+  Step 5 — PlayerActivity: সব VLC API → Media3 (Player.Listener, currentPosition/seekTo, setPlaybackSpeed,
+  TrackSelectionParameters, resizeMode, LoudnessEnhancer for 101-200% gain)। PiP/gain/watchdog full ExoPlayer path-এ;
+  fallback mode-এ core playback।
+
+
+  Step 7 — Cleanup: HlsProxyServer/SlidingChunkCache/HlsSource/M3u8Rewriter delete; PlaybackBuffering.kt → ExoPlayer
+  LoadControl।
+
+  প্রতধাপcompile করেverify করব। Risk: বড়migration (~600-800 lines touched); আসল IPTV stream/device-এ আপনাকtest করতেহবে—  আমারকাছনেই।
+
+● Exited plan mode
+
+● Approved. Tasks banai, tarpor Step 1 (gradle) diye shuru kori.
+
+● Step 1 — Gradle. Let me read the current build files first.
+
+  Read 1 file (ctrl+o to expand)
+
+● Now add Media3 to version catalog. Let me edit libs.versions.toml:
+
+● Update(gradle\libs.versions.toml)
+  ⎿  File must be read first
+
+● I read part of it earlier via cat, but not with Read. Let me Read it properly.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(gradle\libs.versions.toml)
+  ⎿  Added 1 line
+      16  okhttp = "4.12.0"
+      17  ksp = "1.9.24-1.0.20"
+      18  libvlc = "3.6.0"
+      19 +media3 = "1.4.1"
+      20  recyclerview = "1.3.2"
+      21  lifecycle = "2.8.4"
+      22  fragmentKtx = "1.8.2"
+
+● Update(gradle\libs.versions.toml)
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Edit file
+ gradle\libs.versions.toml
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ 57  gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+ 58  okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+
+● I read part of it earlier via cat, but not with Read. Let me Read it properly.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(gradle\libs.versions.toml)
+  ⎿  Added 1 line
+      16  okhttp = "4.12.0"
+      17  ksp = "1.9.24-1.0.20"
+      18  libvlc = "3.6.0"
+      19 +media3 = "1.4.1"
+      20  recyclerview = "1.3.2"
+      21  lifecycle = "2.8.4"
+      22  fragmentKtx = "1.8.2"
+
+● Update(gradle\libs.versions.toml)
+  ⎿  Added 8 lines, removed 1 line
+      57  gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+      58  okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+      59
+      60 -# LibVLC
+      60 +# LibVLC (fallback engine — kept after the Media3 migration for streams ExoPlayer can't open)
+      61  libvlc-all = { group = "org.videolan.android", name = "libvlc-all", version.ref = "libvlc" }
+      62
+      63 +# Media3 / ExoPlayer (primary playback engine)
+      64 +media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
+      65 +media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exoplayer-hls", version.ref = "media
+         +3" }                                                                                                                66 +media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }                               67 +media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
+      68 +media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasource-okhttp", version.ref
+         += "media3" }
+      69 +
+      70  # RecyclerView / Lifecycle / Fragment
+      71  recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
+      72  lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref
+           = "lifecycle" }
+
+● Update(app\build.gradle.kts)
+  ⎿  Added 8 lines, removed 1 line
+      69      implementation(libs.gson)
+      70      implementation(libs.okhttp)
+      71
+      72 -    // LibVLC
+      72 +    // Media3 / ExoPlayer — primary playback engine
+      73 +    implementation(libs.media3.exoplayer)
+      74 +    implementation(libs.media3.exoplayer.hls)
+      75 +    implementation(libs.media3.ui)
+      76 +    implementation(libs.media3.session)
+      77 +    implementation(libs.media3.datasource.okhttp)
+      78 +                                                                                                                    79 +    // LibVLC — fallback engine (streams ExoPlayer can't open)
+      80      implementation(libs.libvlc.all)
+      81
+      82      // RecyclerView / Lifecycle / Fragment
+
+● Let me verify Media3 dependencies resolve.
+
+● Bash(cd "C:\Users\akash\AndroidStudioProjects\M3uVideoPlayer" && (./gradlew :app:dependencies --configuration
+      debugRuntimeClasspath 2>&1 | grep -Ei "media3|BUILD FAI…)
+  ⎿  Starting a Gradle Daemon, 1 incompatible and 2 stopped Daemons could not be reused, use --status for details
+     +--- androidx.media3:media3-exoplayer:1.4.1
+     |    +--- androidx.media3:media3-common:1.4.1
+     … +17 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● Media3 1.4.1 resolves cleanly. Step 1 done.
+
+● Step 2 — Layout. Let me read the full player layout.
+
+  Read 1 file (ctrl+o to expand)
+
+● Replace VLCVideoLayout with a container holding both a Media3 PlayerView (primary) and a VLCVideoLayout (fallback),
+  toggled by the active engine. Custom controls stay, so PlayerView uses use_controller="false".
+
+● Update(app\src\main\res\layout\activity_player.xml)
+  ⎿  Added 15 lines, removed 3 lines
+      18      android:background="@android:color/black"
+      19      android:keepScreenOn="true">
+      20
+      21 -    <!-- LibVLC renders the decoded video frames here; VLCVideoLayout manages the underlying
+      22 -         SurfaceView + subtitle surface and their lifecycle for us. -->
+      21 +    <!-- Video output. Media3 [PlayerView] is the primary render surface; the [VLCVideoLayout] below
+      22 +         is only made visible when a stream falls back to the LibVLC engine. Custom app controls are
+      23 +         used, so PlayerView's own controller is disabled. -->
+      24 +    <androidx.media3.ui.PlayerView
+      25 +        android:id="@+id/playerView"
+      26 +        android:layout_width="match_parent"                                                                         27 +        android:layout_height="match_parent"
+      28 +        android:layout_gravity="center"
+      29 +        app:use_controller="false"
+      30 +        app:resize_mode="fit"
+      31 +        app:surface_type="surface_view" />
+      32 +
+      33 +    <!-- LibVLC fallback surface — hidden until an ExoPlayer error switches engines. -->
+      34      <org.videolan.libvlc.util.VLCVideoLayout
+      35          android:id="@+id/videoLayout"
+      36          android:layout_width="match_parent"
+      37          android:layout_height="match_parent"
+      27 -        android:layout_gravity="center" />
+      38 +        android:layout_gravity="center"
+      39 +        android:visibility="gone" />
+      40
+      41      <!-- Step 9.3: buffering / connecting spinner. -->
+      42      <ProgressBar
+
+● Step 3 — DI. ExoPlayer is per-Activity (lifecycle-bound), so DI provides the shared building blocks — the LoadControl
+  (buffer tuning, replacing PlaybackBuffering.kt) — and keeps LibVLC. The Activity builds the ExoPlayer from the
+  injected OkHttpClient + LoadControl.
+
+  Read 1 file (ctrl+o to expand)
+
+● I read it earlier. Let me rewrite PlayerModule.kt to provide the Media3 building blocks while keeping VLC.
+
+● Write(app\src\main\java\com\mdaksh\m3uvideoplayer\di\PlayerModule.kt)
+  ⎿  Added 72 lines, removed 18 lines
+       1  package com.mdaksh.m3uvideoplayer.di
+       2
+       3  import android.content.Context
+       4 +import androidx.media3.common.util.UnstableApi
+       5 +import androidx.media3.datasource.DataSource
+       6 +import androidx.media3.datasource.DefaultDataSource
+       7 +import androidx.media3.datasource.okhttp.OkHttpDataSource
+       8 +import androidx.media3.exoplayer.DefaultLoadControl
+       9 +import androidx.media3.exoplayer.LoadControl
+      10  import dagger.Module
+      11  import dagger.Provides
+      12  import dagger.hilt.InstallIn
+      13  import dagger.hilt.android.qualifiers.ApplicationContext
+      14  import dagger.hilt.components.SingletonComponent
+      15 +import okhttp3.OkHttpClient
+      16  import org.videolan.libvlc.LibVLC
+      17 +import javax.inject.Named
+      18  import javax.inject.Singleton
+      19
+      20  /**
+      13 - * Step 9.2 — provides the single, process-wide LibVLC [LibVLC] engine instance via Hilt.
+      21 + * Media3 migration — process-wide playback engine wiring.
+      22   *
+      15 - * `LibVLC` is expensive to create and owns native resources, so exactly one is shared for the whole
+      16 - * app (`@Singleton`); each [org.videolan.libvlc.MediaPlayer] is cheap and created per-[PlayerActivity]
+      17 - * on top of it. The option list is where the engine-wide flags live:
+      23 + * PRIMARY engine is **Media3 / ExoPlayer**. ExoPlayer itself is cheap and lifecycle-bound, so it is
+      24 + * built per-[com.mdaksh.m3uvideoplayer.ui.player.PlayerActivity]; this module provides the expensive
+      25 + * / shared pieces it needs:
+      26   *
+      19 - *  - **Step 9.5:** `--avcodec-hw=any` turns on hardware-accelerated decoding, which is what makes
+      20 - *    4K/8K streams playable on real devices. `--avcodec-fast`/`--avcodec-skiploopfilter` shave
+      21 - *    decode cost further for high-bitrate content.
+      22 - *  - **Step 9.4:** the digital audio amplifier is enabled here so the player can push gain past 100%
+      23 - *    (up to a 200% boost) at playback time via `MediaPlayer.setVolume`.
+      27 + *  - **[LoadControl]** — the buffering policy. This REPLACES the old LibVLC `:network-caching` knobs
+      28 + *    (the former `PlaybackBuffering.kt`). ExoPlayer's LoadControl is what does the YouTube-style
+      29 + *    forward buffering + rolling eviction natively, so the hand-rolled HLS proxy is no longer needed.
+      30 + *  - **[DataSource.Factory]** — HTTP stack for media, backed by the app's shared [OkHttpClient] so
+      31 + *    per-stream `#EXTVLCOPT` headers (Referer / User-Agent) can be attached the same way as before.
+      32 + *
+      33 + * FALLBACK engine is **LibVLC**, kept for streams ExoPlayer can't open (exotic codecs / containers).
+      34 + * It is expensive to create and owns native resources, so exactly one is shared (`@Singleton`),
+      35 + * qualified `@Named("vlc")`. A [org.videolan.libvlc.MediaPlayer] on top of it is built lazily by the
+      36 + * activity only if a fallback actually happens.
+      37   */
+      38  @Module
+      39  @InstallIn(SingletonComponent::class)
+      40  object PlayerModule {
+      41
+      42 +    // --- Media3 / ExoPlayer building blocks ---------------------------------------------------
+      43 +
+      44 +    /**
+      45 +     * Buffering policy for live IPTV + VOD. Generous forward buffer so the decoder never underflows
+      46 +     * at an HLS/TS segment boundary (the promt2 "chunk-gap lag" problem), while `startPlayback`/
+      47 +     * `rebuffer` thresholds stay low so channels start fast. This is ExoPlayer's native equivalent of
+      48 +     * the old `network-caching=8000 / live-caching=6000` values, done at the buffer layer.
+      49 +     */
+      50      @Provides
+      51      @Singleton
+      52 +    @UnstableApi
+      53 +    fun provideLoadControl(): LoadControl =
+      54 +        DefaultLoadControl.Builder()
+      55 +            .setBufferDurationsMs(
+      56 +                /* minBufferMs = */ 15_000,      // keep up to 15s buffered ahead
+      57 +                /* maxBufferMs = */ 60_000,      // allow up to 60s on good networks
+      58 +                /* bufferForPlaybackMs = */ 2_500,           // ~2.5s buffered before first frame
+      59 +                /* bufferForPlaybackAfterRebufferMs = */ 5_000 // 5s after a stall before resuming
+      60 +            )
+      61 +            .setPrioritizeTimeOverSizeThresholds(true) // favour target duration over a byte cap for li
+         +ve
+      62 +            .build()
+      63 +
+      64 +    /**
+      65 +     * Media HTTP data source backed by the shared OkHttp client. [OkHttpDataSource] lets the player
+      66 +     * fetch playlists/segments through the same stack (and TLS/proxy config) as the rest of the app;
+      67 +     * per-request headers are set at load time in the activity.
+      68 +     */
+      69 +    @Provides
+      70 +    @Singleton
+      71 +    @UnstableApi
+      72 +    fun provideMediaDataSourceFactory(
+      73 +        @ApplicationContext context: Context,
+      74 +        okHttpClient: OkHttpClient
+      75 +    ): DataSource.Factory {
+      76 +        val http = OkHttpDataSource.Factory(okHttpClient)
+      77 +        // DefaultDataSource wraps the HTTP factory so local (file/content) URIs also work — e.g. the
+      78 +        // audio-only hand-off or any temporary local cache.
+      79 +        return DefaultDataSource.Factory(context, http)
+      80 +    }
+      81 +
+      82 +    // --- LibVLC fallback engine ---------------------------------------------------------------
+      83 +
+      84 +    /**
+      85 +     * The single shared LibVLC engine, used ONLY when ExoPlayer fails on a stream. `--avcodec-hw=any`
+      86 +     * enables hardware decoding; `--audio-time-stretch` keeps pitch natural during speed changes.
+      87 +     */
+      88 +    @Provides
+      89 +    @Singleton
+      90 +    @Named("vlc")
+      91      fun provideLibVlc(@ApplicationContext context: Context): LibVLC {
+      92          val options = arrayListOf(
+      33 -            // --- Step 9.5: hardware acceleration for 4K/8K ---
+      34 -            "--avcodec-hw=any",       // use any available hardware decoder (MediaCodec on Android)
+      35 -            "--avcodec-fast",         // allow speed-optimised (slightly less accurate) decoding
+      93 +            "--avcodec-hw=any",
+      94 +            "--avcodec-fast",
+      95              "--avcodec-skiploopfilter=all",
+      37 -            "--network-caching=1500", // 1.5s buffer — smoother live IPTV over flaky networks
+      38 -
+      39 -            // --- Step 9.4: digital audio amplifier (allows >100% volume) ---
+      40 -            "--audio-time-stretch",   // keep pitch natural when boosting/altering audio
+      41 -
+      42 -            // Keep the native log readable during bring-up; drop to "0" for release.
+      96 +            "--audio-time-stretch",
+      97              "-vv"
+      98          )
+      99          return LibVLC(context, options)
+
+● DI done. Note: LibVLC is now @Named("vlc"), so PlayerActivity and AudioPlaybackService injection will break until
+  Steps 5-6 update them — that's expected; I'll compile after Step 6 when the chain is consistent.
+
+● Step 4 — EngineController. This is the abstraction that keeps PlayerActivity engine-agnostic. I'll define the
+  interface + track model, then an ExoPlayer impl and a VLC impl. Let me create the package.
+
+● Write(app\src\main\java\com\mdaksh\m3uvideoplayer\ui\player\engine\PlaybackEngine.kt)
+  ⎿  Wrote 94 lines to app\src\main\java\com\mdaksh\m3uvideoplayer\ui\player\engine\PlaybackEngine.kt
+       1 package com.mdaksh.m3uvideoplayer.ui.player.engine
+       2
+       3 /**
+       4  * Media3 migration — the engine-agnostic playback contract.
+       5  *
+       6  * [com.mdaksh.m3uvideoplayer.ui.player.PlayerActivity] talks ONLY to this interface, never to
+       7  * ExoPlayer or LibVLC directly, so the automatic ExoPlayer→VLC fallback is a single swap of the
+       8  * active [PlaybackEngine] with zero UI-code changes. Two implementations exist:
+       9  *  • [ExoPlaybackEngine] — primary (Media3 / ExoPlayer).
+      10  *  • [VlcPlaybackEngine] — fallback (LibVLC), used when ExoPlayer reports a fatal error on a stream.
+     … +84 lines (ctrl+o to expand)
+
+● Now the EngineViews holder (both render surfaces, so the controller can toggle visibility):
+
+● Write(app\src\main\java\com\mdaksh\m3uvideoplayer\ui\player\engine\EngineViews.kt)
+  ⎿  Wrote 16 lines to app\src\main\java\com\mdaksh\m3uvideoplayer\ui\player\engine\EngineViews.kt
+       1 package com.mdaksh.m3uvideoplayer.ui.player.engine
+       2
+       3 import androidx.media3.ui.PlayerView
+       4 import org.videolan.libvlc.util.VLCVideoLayout
+       5
+       6 /**
+       7  * Media3 migration — the two render surfaces from `activity_player.xml`, handed to whichever
+       8  * [PlaybackEngine] is active. Each engine shows its own surface and hides the other on [bind], so
+       9  * an ExoPlayer→VLC fallback swaps what the user sees without the activity touching view visibility.
+      10  */
+     … +6 lines (ctrl+o to expand)
+
+● Now the ExoPlayer implementation — the primary engine.
+
+● Write(app\src\main\java\com\mdaksh\m3uvideoplayer\ui\player\engine\ExoPlaybackEngine.kt)
+  ⎿  Wrote 221 lines to app\src\main\java\com\mdaksh\m3uvideoplayer\ui\player\engine\ExoPlaybackEngine.kt
+       1 package com.mdaksh.m3uvideoplayer.ui.player.engine
+       2
+       3 import android.content.Context
+       4 import android.media.audiofx.LoudnessEnhancer
+       5 import android.view.View
+       6 import androidx.media3.common.C
+       7 import androidx.media3.common.MediaItem
+       8 import androidx.media3.common.PlaybackException
+       9 import androidx.media3.common.Player
+      10 import androidx.media3.common.TrackSelectionOverride
+     … +211 lines (ctrl+o to expand)
+
+● Now the VLC fallback engine, wrapping the old LibVLC logic behind the same interface.
+
+● Write(app\src\main\java\com\mdaksh\m3uvideoplayer\ui\player\engine\VlcPlaybackEngine.kt)
+  ⎿  Wrote 141 lines to app\src\main\java\com\mdaksh\m3uvideoplayer\ui\player\engine\VlcPlaybackEngine.kt
+       1 package com.mdaksh.m3uvideoplayer.ui.player.engine
+       2
+       3 import android.net.Uri
+       4 import android.view.View
+       5 import org.videolan.libvlc.LibVLC
+       6 import org.videolan.libvlc.Media
+       7 import org.videolan.libvlc.MediaPlayer
+       8 import org.videolan.libvlc.interfaces.IMedia
+       9
+      10 /**
+     … +131 lines (ctrl+o to expand)
+
+● Now the EngineController that owns both engines, delegates to the active one, and does the auto-fallback on error.
+
+✽ Building EngineController… (13m 58s · ↓ 30.4k tokens)
+  ⎿  ■ Step 4: EngineController abstraction
+     □ Step 5: PlayerActivity migration
+     □ Step 6: AudioPlaybackService migration
+     □ Step 7: Cleanup — delete proxy, rework buffering
+     √ Step 1: Gradle — add Media3, keep VLC
+      … +2 completed

@@ -75,22 +75,50 @@ class M3UParser {
     /**
      * Infers whether a channel is LIVE, a MOVIE, or a SERIES based on its group-title and name.
      * M3U providers often use keywords like "Movies", "Cinema", "Series", "VOD" to distinguish.
+     *
+     * SERIES detection has absolute priority over MOVIE detection — an episode entry like
+     * "Loki S02E05 1080p BluRay" must never end up in the All Movies folder just because it
+     * contains a quality tag (1080p/bluray) that would otherwise trigger MOVIE detection.
+     *
+     * The SxxExx regex (e.g. S01E01, S2E5, s12e099) catches any season/episode numbering pattern
+     * without requiring the provider to spell out "series" or "episode" in the group title.
      */
+    private val episodePattern = Regex("""s\d{1,4}e\d{1,4}""", RegexOption.IGNORE_CASE)
+
     private fun inferContentType(groupName: String, channelName: String): String {
-        val combined = "$groupName $channelName".lowercase()
-        return when {
-            // Series detection
-            combined.contains("series") || combined.contains("season") || 
-            combined.contains("episode") || combined.contains("s01e01") -> ContentType.SERIES
-            
-            // Movie detection
-            combined.contains("movie") || combined.contains("cinema") || 
-            combined.contains("vod") || combined.contains("2160p") || 
-            combined.contains("1080p") || combined.contains("bluray") -> ContentType.MOVIE
-            
-            // Default to LIVE
-            else -> ContentType.LIVE
-        }
+        val groupLower = groupName.lowercase()
+        val nameLower  = channelName.lowercase()
+
+        // --- SERIES (checked FIRST — must win over any quality keywords below) ---
+        val isSeries =
+            // SxxExx pattern in the channel name (e.g. S01E01, S2E5, s12e099)
+            episodePattern.containsMatchIn(nameLower) ||
+            // Explicit series keywords in group or name
+            groupLower.contains("series")   || nameLower.contains("series")   ||
+            groupLower.contains("season")   || nameLower.contains("season")   ||
+            groupLower.contains("episode")  || nameLower.contains("episode")  ||
+            groupLower.contains("tvshow")   || nameLower.contains("tvshow")   ||
+            groupLower.contains("tv show")  || nameLower.contains("tv show")
+
+        if (isSeries) return ContentType.SERIES
+
+        // --- MOVIE (only reached when no SERIES signal was found) ---
+        val isMovie =
+            groupLower.contains("movie")    || nameLower.contains("movie")    ||
+            groupLower.contains("cinema")   || nameLower.contains("cinema")   ||
+            groupLower.contains("film")     || nameLower.contains("film")     ||
+            groupLower.contains("vod")      || nameLower.contains("vod")      ||
+            // Quality/format tags are only reliable MOVIE signals when there is no episode pattern
+            nameLower.contains("2160p")     || nameLower.contains("4k")       ||
+            nameLower.contains("1080p")     || nameLower.contains("720p")     ||
+            nameLower.contains("bluray")    || nameLower.contains("blu-ray")  ||
+            nameLower.contains("bdrip")     || nameLower.contains("webrip")   ||
+            nameLower.contains("hdcam")     || nameLower.contains("dvdrip")
+
+        if (isMovie) return ContentType.MOVIE
+
+        // Default to LIVE
+        return ContentType.LIVE
     }
 
     /**

@@ -69,7 +69,14 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.okhttp)
 
-    // LibVLC
+    // Media3 / ExoPlayer — primary playback engine
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.session)
+    implementation(libs.media3.datasource.okhttp)
+
+    // LibVLC — fallback engine (streams ExoPlayer can't open)
     implementation(libs.libvlc.all)
 
     // RecyclerView / Lifecycle / Fragment

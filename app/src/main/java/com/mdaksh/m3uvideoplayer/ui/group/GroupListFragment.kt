@@ -103,9 +103,16 @@ class GroupListFragment : Fragment() {
 
         binding.fabResume.setOnClickListener {
             val target = viewModel.resumeTarget.value ?: return@setOnClickListener
-            // RULE B / LOGIC_2: live channels bypass positionMs entirely, relaunch at the live edge.
             val resumePos = if (target.isLive) -1L else target.positionMs
-            startActivity(PlayerActivity.newIntent(requireContext(), target.channel, resumePos))
+            // [FIX] Build the full folder queue so Next/Previous navigate within the same group.
+            // buildResumeQueue() is a one-shot suspend call; launch on the lifecycle scope so it
+            // is automatically cancelled if the fragment is destroyed before it completes.
+            viewLifecycleOwner.lifecycleScope.launch {
+                val (queue, startIndex) = viewModel.buildResumeQueue(target)
+                startActivity(
+                    PlayerActivity.newIntent(requireContext(), queue, startIndex, resumePos)
+                )
+            }
         }
     }
 
@@ -116,14 +123,61 @@ class GroupListFragment : Fragment() {
     }
 
     private fun openGroup(group: GroupItem) {
-        // The pinned "All channels" tile opens the list unfiltered; a null group means "no filter".
-        // The pinned "Favorite" tile also passes null for the group but sets favoritesOnly instead.
-        val groupName = if (group.isAllChannels || group.isFavorites) null else group.name
-        findNavController().navigate(
-            GroupListFragmentDirections.actionGroupListFragmentToChannelListFragment(
-                viewModel.playlistId, groupName, group.isFavorites
-            )
-        )
+        when {
+            group.isAllMovies -> {
+                // "All Movies" tile → flat channel list filtered to MOVIE contentType only
+                findNavController().navigate(
+                    GroupListFragmentDirections.actionGroupListFragmentToChannelListFragment(
+                        playlistId = viewModel.playlistId,
+                        groupName = null,
+                        favoritesOnly = false,
+                        contentFilter = "MOVIE"
+                    )
+                )
+            }
+            group.isAllSeries -> {
+                // "All Series" tile → GroupList sub-screen (seriesOnly=true) showing per-series folders
+                findNavController().navigate(
+                    GroupListFragmentDirections.actionGroupListFragmentSelf(
+                        playlistId = viewModel.playlistId,
+                        seriesOnly = true
+                    )
+                )
+            }
+            group.isAllChannels || group.isFavorites -> {
+                // Pinned "All channels" or "Favorite" tile → unfiltered / favorites-only channel list
+                findNavController().navigate(
+                    GroupListFragmentDirections.actionGroupListFragmentToChannelListFragment(
+                        playlistId = viewModel.playlistId,
+                        groupName = null,
+                        favoritesOnly = group.isFavorites,
+                        contentFilter = null
+                    )
+                )
+            }
+            viewModel.seriesOnly -> {
+                // Inside the "All Series" sub-screen: tapping a folder shows SERIES episodes for that group
+                findNavController().navigate(
+                    GroupListFragmentDirections.actionGroupListFragmentToChannelListFragment(
+                        playlistId = viewModel.playlistId,
+                        groupName = group.name,
+                        favoritesOnly = false,
+                        contentFilter = "SERIES"
+                    )
+                )
+            }
+            else -> {
+                // Regular folder tile → channel list for that group, no contentType filter
+                findNavController().navigate(
+                    GroupListFragmentDirections.actionGroupListFragmentToChannelListFragment(
+                        playlistId = viewModel.playlistId,
+                        groupName = group.name,
+                        favoritesOnly = false,
+                        contentFilter = null
+                    )
+                )
+            }
+        }
     }
 
     /**
@@ -144,7 +198,7 @@ class GroupListFragment : Fragment() {
 
     private fun setupToolbar() {
         setupUniversalHeader(
-            title = getString(R.string.title_folders),
+            title = if (viewModel.seriesOnly) getString(R.string.all_series) else getString(R.string.title_folders),
             showBack = true,
             onQueryChange = { viewModel.setSearchQuery(it) },
             onViewMode = { showFolderViewModeMenu() },

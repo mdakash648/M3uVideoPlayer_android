@@ -110,6 +110,28 @@ class UserPreferencesRepository @Inject constructor(
         dataStore.edit { prefs -> prefs[KEY_POSTER_COLUMN_COUNT] = count }
     }
 
+    /** The globally-saved player controller auto-hide timeout duration (in milliseconds). */
+    val controlsTimeoutMsFlow: Flow<Int> = dataStore.data.map { prefs ->
+        prefs[KEY_CONTROLS_TIMEOUT_MS] ?: DEFAULT_CONTROLS_TIMEOUT_MS
+    }
+
+    /** Persists the controls auto-hide timeout duration (in milliseconds). */
+    suspend fun setControlsTimeoutMs(timeoutMs: Int) {
+        val clamped = timeoutMs.coerceIn(CONTROLS_TIMEOUT_MIN, CONTROLS_TIMEOUT_MAX)
+        dataStore.edit { prefs -> prefs[KEY_CONTROLS_TIMEOUT_MS] = clamped }
+    }
+
+    /** The globally-saved player swipe seek sensitivity (in percentage). */
+    val swipeSensitivityPercentFlow: Flow<Int> = dataStore.data.map { prefs ->
+        prefs[KEY_SWIPE_SENSITIVITY_PERCENT] ?: DEFAULT_SWIPE_SENSITIVITY_PERCENT
+    }
+
+    /** Persists the player swipe seek sensitivity (in percentage). */
+    suspend fun setSwipeSensitivityPercent(percent: Int) {
+        val clamped = percent.coerceIn(SWIPE_SENSITIVITY_MIN, SWIPE_SENSITIVITY_MAX)
+        dataStore.edit { prefs -> prefs[KEY_SWIPE_SENSITIVITY_PERCENT] = clamped }
+    }
+
     companion object {
         private val KEY_VIEW_MODE = stringPreferencesKey("channel_view_mode")
         private val KEY_FOLDER_VIEW_MODE = stringPreferencesKey("folder_view_mode")
@@ -117,6 +139,8 @@ class UserPreferencesRepository @Inject constructor(
         private val KEY_CHANNEL_SORT_ORDER = stringPreferencesKey("channel_sort_order")
         private val KEY_GRID_COLUMN_COUNT = intPreferencesKey("grid_column_count")
         private val KEY_POSTER_COLUMN_COUNT = intPreferencesKey("poster_column_count")
+        private val KEY_CONTROLS_TIMEOUT_MS = intPreferencesKey("controls_timeout_ms")
+        private val KEY_SWIPE_SENSITIVITY_PERCENT = intPreferencesKey("swipe_sensitivity_percent")
 
         /** Sentinel: use the built-in responsive column count instead of a fixed user value. */
         const val COLUMN_COUNT_AUTO = 0
@@ -124,6 +148,16 @@ class UserPreferencesRepository @Inject constructor(
         const val COLUMN_COUNT_MIN = 2
         /** Largest fixed column count the user can pick. */
         const val COLUMN_COUNT_MAX = 8
+
+        const val DEFAULT_CONTROLS_TIMEOUT_MS = 3500
+        const val CONTROLS_TIMEOUT_MIN = 500      // 0.5s
+        const val CONTROLS_TIMEOUT_MAX = 10000    // 10.0s
+        const val CONTROLS_TIMEOUT_STEP = 500     // 0.5s step
+
+        const val DEFAULT_SWIPE_SENSITIVITY_PERCENT = 25
+        const val SWIPE_SENSITIVITY_MIN = 25
+        const val SWIPE_SENSITIVITY_MAX = 200
+        const val SWIPE_SENSITIVITY_STEP = 25
     }
 }
 

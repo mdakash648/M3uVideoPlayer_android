@@ -44,9 +44,23 @@
             android:name="playlistId"
             app:argType="long" />
 
+        <!--
+            All Series sub-screen: when true, this folder screen lists only per-series subfolders
+            (SERIES channels grouped by group-title), with no pinned All/Favorite tiles and sort
+            disabled. Set by the "All Series" tile via the self-action below.
+        -->
+        <argument
+            android:name="seriesOnly"
+            app:argType="boolean"
+            android:defaultValue="false" />
+
         <action
             android:id="@+id/action_groupListFragment_to_channelListFragment"
             app:destination="@id/channelListFragment" />
+
+        <action
+            android:id="@+id/action_groupListFragment_self"
+            app:destination="@id/groupListFragment" />
 
         <action
             android:id="@+id/action_groupListFragment_to_settingsFragment"
@@ -128,6 +142,17 @@
             android:name="favoritesOnly"
             app:argType="boolean"
             android:defaultValue="false" />
+
+        <!--
+            Optional contentType filter (MOVIE / SERIES), set by the "All Movies" tile and the
+            per-series subfolders. Null/blank means "no contentType filter". Consumed by
+            ChannelListViewModel alongside groupName.
+        -->
+        <argument
+            android:name="contentFilter"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
 
         <action
             android:id="@+id/action_channelListFragment_to_settingsFragment"

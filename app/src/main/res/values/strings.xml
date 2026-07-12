@@ -88,6 +88,8 @@
 
     <!-- Folder tile sort filter -->
     <string name="all_channels">All channels</string>
+    <string name="all_movies">All Movies</string>
+    <string name="all_series">All Series</string>
     <string name="sort">Sort</string>
     <string name="sort_ascending">Ascending</string>
     <string name="sort_descending">Descending</string>
@@ -110,6 +112,13 @@
     <string name="column_count_auto">Auto</string>
     <string name="column_count_decrease">Fewer columns</string>
     <string name="column_count_increase">More columns</string>
+
+    <!-- Settings ▸ Playback (controller auto-hide timeout) -->
+    <string name="settings_section_playback">Playback</string>
+    <string name="settings_controls_timeout">Controller Timeout</string>
+    <string name="settings_controls_timeout_subtitle">How long the player controller stays on screen before auto-hiding</string>
+    <string name="settings_swipe_sensitivity">Swipe Seek Sensitivity</string>
+    <string name="settings_swipe_sensitivity_subtitle">Speed of the left/right swipe gesture to skip video position</string>
 
     <!-- Step 9 — LibVLC player screen -->
     <string name="player_error_generic">Playback error.</string>
@@ -138,7 +147,7 @@
     <string name="player_seek_time_with_duration">%1$s / %2$s</string>
     <string name="player_locked_hint">Swipe Up to Down to Unlock</string>
     <!-- [BUG FIX] Live TV Playback Safety — RULE B seek-lock toast. -->
-    <string name="player_live_seek_disabled">Seeking is disabled on Live Channels</string>
+    <string name="player_live_seek_disabled">Seeking is unavailable on Live Streams</string>
     <string name="player_audio_notification_channel">Background playback</string>
     <string name="player_audio_playing">Playing audio</string>
     <string name="player_audio_mode_on">Audio-only mode on</string>

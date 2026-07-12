@@ -43,18 +43,32 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.exoplayer.LoadControl
+import com.mdaksh.m3uvideoplayer.ui.player.engine.EngineController
+import com.mdaksh.m3uvideoplayer.ui.player.engine.EngineViews
+import com.mdaksh.m3uvideoplayer.ui.player.engine.ExoPlaybackEngine
+import com.mdaksh.m3uvideoplayer.ui.player.engine.PlaybackEngine
+import com.mdaksh.m3uvideoplayer.ui.player.engine.VlcPlaybackEngine
 import org.videolan.libvlc.LibVLC
-import org.videolan.libvlc.Media
-import org.videolan.libvlc.MediaPlayer
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.mdaksh.m3uvideoplayer.data.preferences.UserPreferencesRepository
 
 /**
- * Step 9 + Step 10 + Step 11 — the LibVLC-backed video player screen, styled after VLC's OSD.
+ * Step 9 + Step 10 + Step 11 — the video player screen, styled after VLC's OSD.
  *
- * Step 9 (engine): Hilt-injected [LibVLC], per-screen [MediaPlayer], loading/error states, HW decode.
+ * Step 9 (engine): Media3 migration — playback runs through [EngineController] (ExoPlayer primary,
+ * LibVLC fallback) behind the [PlaybackEngine] contract; loading/error states, HW decode. ExoPlayer
+ * buffers HLS/TS segments natively (forward buffer + rolling eviction + ABR), so the old hand-rolled
+ * HLS proxy is gone.
  *
  * Step 10 (advanced UI): auto-hiding controller (10.1), swipe brightness/volume (10.2), double-tap
  * ±10s seek (10.3), lock (10.4), audio-only hand-off (10.5).
@@ -68,13 +82,23 @@ import kotlin.math.roundToInt
  *  - **D-pad / keyboard (TV remotes):** arrows = volume, left/right single/double = seek 10s/30s,
  *    center = play/pause (long-press = temporary 2x turbo).
  */
+@UnstableApi
 @AndroidEntryPoint
 class PlayerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPlayerBinding
 
+    /** Media3 migration — LibVLC is now the FALLBACK engine only; qualified `@Named("vlc")`. */
     @Inject
+    @Named("vlc")
     lateinit var libVlc: LibVLC
+
+    /** Media3 — ExoPlayer HTTP stack (shared OkHttp) and buffering policy, from PlayerModule. */
+    @Inject
+    lateinit var mediaDataSourceFactory: DataSource.Factory
+
+    @Inject
+    lateinit var loadControl: LoadControl
 
     /** promt4 — persistent resume-point store (save/read per-video playback position). */
     @Inject
@@ -87,7 +111,18 @@ class PlayerActivity : AppCompatActivity() {
     @Inject
     lateinit var savePlaylistResumePointUseCase: SavePlaylistResumePointUseCase
 
-    private var mediaPlayer: MediaPlayer? = null
+    @Inject
+    lateinit var userPreferencesRepository: UserPreferencesRepository
+
+    private var controlsTimeoutMs = UserPreferencesRepository.DEFAULT_CONTROLS_TIMEOUT_MS.toLong()
+    private var swipeSensitivityPercent = UserPreferencesRepository.DEFAULT_SWIPE_SENSITIVITY_PERCENT
+
+    /**
+     * Media3 migration — the single engine-agnostic playback controller (ExoPlayer primary, LibVLC
+     * fallback). All former `mediaPlayer.*` calls now go through this. Built in [onCreate], released
+     * in [onDestroy]. The old hand-rolled HLS proxy is gone — ExoPlayer buffers segments natively.
+     */
+    private var engine: EngineController? = null
 
     /**
      * promt4 — activity-scoped background scope for resume-point *reads* (the initial resume lookup).
@@ -145,9 +180,9 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * promt1 §1(1) — set when a *brand new* video is loaded via [play]; the next [MediaPlayer.Event.Playing]
+     * promt1 §1(1) — set when a *brand new* video is loaded via [play]; the next engine `onReady`
      * drops the D-pad focus onto Play/Pause. Distinguishes a fresh load from a plain resume (which
-     * calls `player.play()` directly and must not steal focus back).
+     * calls `play()` directly and must not steal focus back).
      */
     private var pendingFocusOnPlay = false
 
@@ -189,6 +224,13 @@ class PlayerActivity : AppCompatActivity() {
     private var draggingSeek = false
     private var seekDragStartPositionMs = 0L
     private var seekPreviewTargetMs = 0L
+    private var seekDragControlsWereVisible = false
+    private var lastSeekTime = 0L
+    private var seekControlsWereVisible = false
+    private var draggingBrightness = false
+    private var draggingVolume = false
+    private var lastSwipeEndTime = 0L
+    private var volumeAccumulator = 0f
 
     /** Gesture rework — brightness control is meaningless on a TV panel, so disable it there. */
     private val isTv: Boolean by lazy { DeviceUtils.isTv(this) }
@@ -228,6 +270,20 @@ class PlayerActivity : AppCompatActivity() {
 
     private val hideControlsRunnable = Runnable { setControlsVisible(false) }
     private val hideIndicatorRunnable = Runnable { binding.gestureIndicator.visibility = View.GONE }
+    private val hideLeftDoubleTapRunnable = Runnable {
+        binding.leftDoubleTapLayout.animate()
+            .alpha(0f)
+            .setDuration(300)
+            .withEndAction { binding.leftDoubleTapLayout.visibility = View.GONE }
+            .start()
+    }
+    private val hideRightDoubleTapRunnable = Runnable {
+        binding.rightDoubleTapLayout.animate()
+            .alpha(0f)
+            .setDuration(300)
+            .withEndAction { binding.rightDoubleTapLayout.visibility = View.GONE }
+            .start()
+    }
     private val hideSeekTimeIndicatorRunnable = Runnable { binding.seekTimeIndicator.visibility = View.GONE }
     
     private val commitDpadBarSeekRunnable = Runnable {
@@ -236,7 +292,9 @@ class PlayerActivity : AppCompatActivity() {
         if (blockIfLiveSeek()) { scheduleHideControls(); return@Runnable }
         // [BUG FIX] STEP_2 & STEP_3 — commit the explicit seek target accumulated from D-pad interaction
         // on the SeekBar, and resume background updates.
-        mediaPlayer?.time = binding.seekBar.progress.toLong()
+        seekControlsWereVisible = true
+        lastSeekTime = System.currentTimeMillis()
+        engine?.seekTo(binding.seekBar.progress.toLong())
         scheduleHideControls()
     }
 
@@ -310,11 +368,32 @@ class PlayerActivity : AppCompatActivity() {
             registerReceiver(volumeReceiver, android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"))
         }
 
-        mediaPlayer = MediaPlayer(libVlc).also { player ->
-            // 3rd arg = enableSubtitles: create the subtitle surface so selected SPU tracks
-            // actually render (bottom-center overlay). Was false, which silently dropped subtitles.
-            player.attachViews(binding.videoLayout, null, true, false)
-            player.setEventListener(::onPlayerEvent)
+        // Media3 migration — build the dual engine (ExoPlayer primary + LibVLC fallback) and bind it
+        // to both render surfaces. The controller shows/hides the right surface per active engine.
+        engine = EngineController(
+            exo = ExoPlaybackEngine(this, mediaDataSourceFactory, loadControl),
+            vlc = VlcPlaybackEngine(libVlc)
+        ).also { controller ->
+            controller.bind(
+                EngineViews(binding.playerView, binding.videoLayout),
+                engineListener
+            )
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                userPreferencesRepository.controlsTimeoutMsFlow.collect { timeoutMs ->
+                    controlsTimeoutMs = timeoutMs.toLong()
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                userPreferencesRepository.swipeSensitivityPercentFlow.collect { percent ->
+                    swipeSensitivityPercent = percent
+                }
+            }
         }
 
         setupControls()
@@ -341,6 +420,13 @@ class PlayerActivity : AppCompatActivity() {
         if (forcedResumeMs > 0L) {
             resumeChecked = true
             play(url, forcedResumeMs)
+            return
+        }
+        // Live TV (contentType LIVE / isLive hint) has no rewindable timeline — never look up a
+        // resume point and never show the Continue / Start Over modal for it. Start at the live edge.
+        if (currentQueueItem?.isLive != false) {
+            resumeChecked = true
+            play(url, 0L)
             return
         }
         val playlistId = currentQueueItem?.playlistId ?: 0L
@@ -394,18 +480,27 @@ class PlayerActivity : AppCompatActivity() {
 
     /** [FEATURE UPDATE] Rebuilds the parallel-array queue extras back into [QueueItem]s. */
     private fun parseQueue(intent: Intent): List<QueueItem> {
+        val memoryQueue = queueMemoryHolder
+        if (memoryQueue != null) {
+            queueMemoryHolder = null // free memory immediately
+            return memoryQueue
+        }
+
         val urls = intent.getStringArrayListExtra(EXTRA_QUEUE_URLS).orEmpty()
         val titles = intent.getStringArrayListExtra(EXTRA_QUEUE_TITLES).orEmpty()
         val referrers = intent.getStringArrayListExtra(EXTRA_QUEUE_REFERRERS).orEmpty()
         val userAgents = intent.getStringArrayListExtra(EXTRA_QUEUE_USER_AGENTS).orEmpty()
         val playlistIds = intent.getLongArrayExtra(EXTRA_QUEUE_PLAYLIST_IDS) ?: LongArray(0)
+        val isLiveFlags = intent.getBooleanArrayExtra(EXTRA_QUEUE_IS_LIVE) ?: BooleanArray(0)
         return urls.indices.map { i ->
             QueueItem(
                 url = urls[i],
                 title = titles.getOrElse(i) { "" },
                 httpReferrer = referrers.getOrElse(i) { "" }.takeIf { it.isNotBlank() },
                 httpUserAgent = userAgents.getOrElse(i) { "" }.takeIf { it.isNotBlank() },
-                playlistId = playlistIds.getOrElse(i) { 0L }
+                playlistId = playlistIds.getOrElse(i) { 0L },
+                // promt2 — default to Live (the common IPTV case) when the hint is absent.
+                isLive = isLiveFlags.getOrElse(i) { true }
             )
         }
     }
@@ -416,28 +511,30 @@ class PlayerActivity : AppCompatActivity() {
      * @param startMs promt4 — when > 0, LibVLC begins decoding at this offset via `:start-time`
      *   (whole seconds), so "Continue" resumes cleanly at the saved position rather than seeking
      *   after the fact.
+     * @param forceSoftwareDecode ITEM C EXTRA KNOB — when true this load disables hardware decoding
+     *   entirely and pins VLC to software decode. Used by the live surface-recovery watchdog so a
+     *   black-screen/audio-only caused by a flaky HW decoder is re-opened on the reliable SW path
+     *   instead of dropping the video track again.
      */
-    private fun play(url: String, startMs: Long = 0L) {
+    private fun play(url: String, startMs: Long = 0L, forceSoftwareDecode: Boolean = false) {
         showLoading()
         // [BUG FIX] Live TV Playback Safety — any fresh load (channel switch, manual live resume,
         // or the surface-recovery watchdog) clears the "user stopped a live channel" flag so it
         // never leaks into the next stream.
         liveStreamStoppedByUser = false
-        // promt1 §1(1) — a brand-new load; the upcoming Playing event snaps focus to Play/Pause.
+        // promt1 §1(1) — a brand-new load; the upcoming ready event snaps focus to Play/Pause.
         pendingFocusOnPlay = true
-        val media = Media(libVlc, Uri.parse(url)).apply {
-            setHWDecoderEnabled(true, false)   // Step 9.5
-            // promt1 — adaptive look-ahead buffering tuned to the stream type (replaces the flat 1.5s cache).
-            applyPromt1Buffering(url)
-            // promt2 — pass #EXTVLCOPT headers so protected streams authenticate instead of 403-ing.
-            httpReferrer?.let { addOption(":http-referrer=$it") }
-            httpUserAgent?.let { addOption(":http-user-agent=$it") }
-            // promt4 — resume offset (seconds); harmless at 0.
-            if (startMs > 0L) addOption(":start-time=${startMs / 1000}")
-        }
-        mediaPlayer?.media = media
-        media.release()
-        mediaPlayer?.play()
+
+        // Media3 migration — hand the stream to the engine controller. ExoPlayer buffers segments,
+        // does adaptive bitrate and rolling eviction natively (no more HLS proxy); if it can't open
+        // the stream it silently falls back to LibVLC. Headers + resume offset are passed through.
+        engine?.load(
+            url = url,
+            referrer = httpReferrer,
+            userAgent = httpUserAgent,
+            startMs = startMs,
+            forceSoftwareDecode = forceSoftwareDecode
+        )
     }
 
     // --- promt4: persistent resume state ------------------------------------------------------
@@ -455,11 +552,11 @@ class PlayerActivity : AppCompatActivity() {
      * stall the UI thread — the exit save in [onStop] relies on that scope outliving this activity.
      */
     private fun saveResumePoint() {
-        val player = mediaPlayer ?: return
+        val player = engine ?: return
         val item = currentQueueItem ?: return
         val url = item.url.takeIf { it.isNotBlank() } ?: return
         val now = System.currentTimeMillis()
-        val duration = player.length
+        val duration = player.durationMs
 
         // promt5 §2 — classify by the stream's real duration, NOT the channel's contentType. M3U
         // imports label every entry LIVE, so a movie in an M3U playlist would otherwise be treated
@@ -485,7 +582,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         // §2A — VOD / movies / local files: store the exact millisecond position (e.g. Thor @ 55:00).
-        val position = player.time
+        val position = player.positionMs
         // Floating Resume Button engine — RULE A trigger (~3-5s into playback via SAVE_INTERVAL_MS),
         // independent of the 15s MIN_WATCHED_MS gate below (that gate is specific to the in-player
         // Continue modal on `resume_points`, per the Isolation Rule).
@@ -533,10 +630,10 @@ class PlayerActivity : AppCompatActivity() {
 
     /** promt4 §1 — flag the current VOD fully watched so re-opening it starts over silently. */
     private fun markCurrentCompleted() {
-        val player = mediaPlayer ?: return
+        val player = engine ?: return
         val item = currentQueueItem ?: return
         val url = item.url.takeIf { it.isNotBlank() } ?: return
-        val duration = player.length
+        val duration = player.durationMs
         if (duration <= 0L) return                 // live (no duration) never "completes"
         upsertResumePoint(
             ResumePointEntity(
@@ -554,65 +651,76 @@ class PlayerActivity : AppCompatActivity() {
         savePlaylistResumePoint(item.playlistId, url, duration, duration, isLive = false)
     }
 
-    private fun onPlayerEvent(event: MediaPlayer.Event) {
-        when (event.type) {
-            MediaPlayer.Event.Buffering ->
-                if (event.buffering < 100f) showLoading() else showVideo()
+    /**
+     * Media3 migration — engine-agnostic playback callbacks, replacing the old `MediaPlayer.Event`
+     * switch. [EngineController] forwards these from whichever engine (ExoPlayer/VLC) is live, and
+     * turns an ExoPlayer failure into the automatic VLC fallback before it ever reaches [onError].
+     */
+    private val engineListener = object : PlaybackEngine.Listener {
 
-            MediaPlayer.Event.Playing -> {
-                showVideo()
-                // Re-apply user preferences the media reset on load.
-                applyVolume()
-                mediaPlayer?.rate = if (turboActive) TURBO_RATE else playbackSpeed
-                updatePlayPauseIcon()
-                handler.removeCallbacks(progressTicker)
-                handler.post(progressTicker)
-                // promt4 §1 — (re)arm the 5s resume-point autosave for the active video.
-                handler.removeCallbacks(saveResumeTicker)
-                handler.postDelayed(saveResumeTicker, SAVE_INTERVAL_MS)
-                // [FEATURE UPDATE] Auto-hide only applies while actually playing — (re)arm the
-                // timer now that playback has genuinely started (covers the initial load, where
-                // scheduleHideControls() was called too early to know we weren't playing yet).
+        override fun onBuffering() = showLoading()
+
+        override fun onReady() {
+            showVideo()
+            // Re-apply user preferences the fresh load reset.
+            applyVolume()
+            engine?.speed = if (turboActive) TURBO_RATE else playbackSpeed
+            updatePlayPauseIcon()
+            handler.removeCallbacks(progressTicker)
+            handler.post(progressTicker)
+            // promt4 §1 — (re)arm the 5s resume-point autosave for the active video.
+            handler.removeCallbacks(saveResumeTicker)
+            handler.postDelayed(saveResumeTicker, SAVE_INTERVAL_MS)
+            // [FEATURE UPDATE] (re)arm auto-hide now that playback has genuinely started.
+            // [FEATURE UPDATE] (re)arm auto-hide now that playback has genuinely started.
+            val isRecentSeek = System.currentTimeMillis() - lastSeekTime < 2000L
+            if (isRecentSeek && !seekControlsWereVisible) {
+                handler.removeCallbacks(hideControlsRunnable)
+                setControlsVisible(false)
+            } else {
                 scheduleHideControls()
-                // promt1 §1(1) — brand-new video: force default D-pad focus onto Play/Pause.
-                if (pendingFocusOnPlay) {
-                    pendingFocusOnPlay = false
-                    focusPlayPause()
-                }
             }
+            // promt1 §1(1) — brand-new video: force default D-pad focus onto Play/Pause.
+            if (pendingFocusOnPlay) {
+                pendingFocusOnPlay = false
+                focusPlayPause()
+            }
+        }
 
-            MediaPlayer.Event.Paused -> {
-                updatePlayPauseIcon()
-                // [FEATURE UPDATE] Paused = no auto-hide; keep the panel (and lock icon) up until
-                // the user resumes or interacts again.
+        override fun onPlayingChanged(isPlaying: Boolean) {
+            updatePlayPauseIcon()
+            if (isPlaying) {
+                val isRecentSeek = System.currentTimeMillis() - lastSeekTime < 2000L
+                if (isRecentSeek && !seekControlsWereVisible) {
+                    handler.removeCallbacks(hideControlsRunnable)
+                    setControlsVisible(false)
+                } else {
+                    scheduleHideControls()
+                }
+            } else {
+                // [FEATURE UPDATE] Paused = no auto-hide; keep the panel up until the user resumes.
                 handler.removeCallbacks(hideControlsRunnable)
                 setControlsVisible(true)
                 // promt4 — pausing is a natural "leaving off" point; snapshot it immediately.
                 handler.removeCallbacks(saveResumeTicker)
                 saveResumePoint()
             }
+        }
 
-            MediaPlayer.Event.Vout -> {
-                // [BUG FIX] Live TV Playback Safety — SURFACE RESET FALLBACK: `voutCount == 0` while
-                // a live channel is still (meant to be) playing means the decoder dropped its video
-                // track/render surface — audio keeps going, video goes permanently black. Force a
-                // fast reconnect to restore the render pipeline instead of leaving it dead.
-                if (event.voutCount == 0 && isLiveStream() && !liveStreamStoppedByUser) {
-                    attemptLiveSurfaceRecovery()
-                } else {
-                    showVideo()
-                }
-            }
+        override fun onVideoSurfaceLost() {
+            // [BUG FIX] Live TV Playback Safety — the decoder dropped its video track/render surface
+            // (audio-only / black screen) while a live channel should be playing. Force a reconnect.
+            if (isLiveStream() && !liveStreamStoppedByUser) attemptLiveSurfaceRecovery()
+            else showVideo()
+        }
 
-            MediaPlayer.Event.EncounteredError ->
-                showError(getString(R.string.player_error_network))
+        override fun onError() = showError(getString(R.string.player_error_network))
 
-            MediaPlayer.Event.EndReached -> {
-                // promt4 §1 — a fully played video is marked completed so it won't prompt to resume.
-                handler.removeCallbacks(saveResumeTicker)
-                markCurrentCompleted()
-                showError(getString(R.string.player_error_ended))
-            }
+        override fun onEnded() {
+            // promt4 §1 — a fully played video is marked completed so it won't prompt to resume.
+            handler.removeCallbacks(saveResumeTicker)
+            markCurrentCompleted()
+            showError(getString(R.string.player_error_ended))
         }
     }
 
@@ -674,6 +782,13 @@ class PlayerActivity : AppCompatActivity() {
 
         seekBar.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                // ITEM A — ABSOLUTE LOCK: a live stream's seekbar must never scrub. Fully CONSUME the
+                // key (return true) so the thumb can't move, and surface the toast once on key-down
+                // instead of routing anything toward player.time.
+                if (isLiveStream()) {
+                    if (event.action == KeyEvent.ACTION_DOWN) blockIfLiveSeek()
+                    return@setOnKeyListener true
+                }
                 if (event.action == KeyEvent.ACTION_DOWN) {
                     if (!userSeeking) {
                         userSeeking = true
@@ -693,11 +808,12 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun togglePlayPause() {
-        val player = mediaPlayer ?: return
-        // [BUG FIX] Live TV Playback Safety — RULE A: a native player.pause() leaves the HLS/TS
-        // decoder holding stale packet/frame references, which is what causes the permanent black
-        // screen (with audio still running) on resume. Live channels get a fully separate
-        // stop-and-reconnect flow instead; see [toggleLivePlayPause].
+        val player = engine ?: return
+        // [BUG FIX] Live TV Playback Safety — RULE A: on the LibVLC fallback a native pause() left the
+        // HLS/TS decoder holding stale frame references (permanent black screen on resume). Live
+        // channels keep the separate stop-and-reconnect flow; see [toggleLivePlayPause]. ExoPlayer
+        // doesn't have that defect, but the reconnect-from-live-edge behaviour is still what users
+        // want for a paused live channel, so we keep the same flow for both engines.
         if (isLiveStream()) {
             toggleLivePlayPause()
             return
@@ -717,13 +833,15 @@ class PlayerActivity : AppCompatActivity() {
      *    real-time live edge (no `:start-time`, exactly like a fresh channel switch).
      */
     private fun toggleLivePlayPause() {
-        val player = mediaPlayer ?: return
+        val player = engine ?: return
         val item = currentQueueItem ?: return
         if (liveStreamStoppedByUser) {
             play(item.url)
         } else {
             liveStreamStoppedByUser = true
-            player.stop()
+            // Media3 migration — the engine has no hard "stop"; pausing releases the decoder pressure
+            // and the resume path re-loads from the live edge via [play], matching the old behaviour.
+            player.pause()
             showLoading()
         }
         updatePlayPauseIcon()
@@ -732,21 +850,34 @@ class PlayerActivity : AppCompatActivity() {
 
     /**
      * [BUG FIX] Live TV Playback Safety — SURFACE RESET FALLBACK: background auto-recovery, called
-     * off a `Vout(voutCount=0)` signal while a live channel is supposed to be playing (see
-     * [onPlayerEvent]). Debounced by [LIVE_RECOVERY_COOLDOWN_MS] so a burst of flaky events during
-     * one real network blip can't spam reconnects, and skipped entirely once the user has
-     * intentionally stopped the channel via [toggleLivePlayPause].
+     * off a `Vout(voutCount=0)` signal or a video-track `ESDeleted` (audio-only) while a live
+     * channel is supposed to be playing (see [onPlayerEvent]). Debounced by [LIVE_RECOVERY_COOLDOWN_MS]
+     * so a burst of flaky events during one real network blip can't spam reconnects, and skipped
+     * entirely once the user has intentionally stopped the channel via [toggleLivePlayPause].
+     *
+     * ITEM C — a plain media reload on the same, now-dead IVLCVout often won't rebuild the render
+     * pipeline (video stays black while audio runs). So we tear the hardware surface down and
+     * rebuild it before reconnecting:
+     *   1. stop the player and detach the VLC video surface view,
+     *   2. re-attach a clean surface layout,
+     *   3. re-load the stream URL forcing SOFTWARE decoding (frame-drop fallback per the EXTRA KNOB).
      */
     private fun attemptLiveSurfaceRecovery() {
         val item = currentQueueItem ?: return
         val now = System.currentTimeMillis()
         if (now - lastLiveRecoveryAtMs < LIVE_RECOVERY_COOLDOWN_MS) return
         lastLiveRecoveryAtMs = now
-        play(item.url)
+
+        // Media3 migration — a fresh [play] rebuilds the whole engine + surface from the live edge,
+        // which is the robust recovery for both engines (ExoPlayer usually self-heals; the VLC
+        // fallback engine's load() detaches/re-attaches its surface internally). Software decode is
+        // forced so a flaky HW decoder that dropped the video track isn't re-selected.
+        showLoading()
+        play(item.url, forceSoftwareDecode = true)
     }
 
     private fun updatePlayPauseIcon() {
-        val playing = mediaPlayer?.isPlaying == true
+        val playing = engine?.isPlaying == true
         val resId = if (playing) R.drawable.ic_pause else R.drawable.ic_play
         binding.btnPlayPause.setImageResource(resId)
     }
@@ -756,7 +887,7 @@ class PlayerActivity : AppCompatActivity() {
      * the same real-duration test already used app-wide (see [saveResumePoint]/[updateProgress])
      * rather than the M3U-declared `contentType`, since providers mislabel entries often.
      */
-    private fun isLiveStream(): Boolean = (mediaPlayer?.length ?: 0L) <= 0L
+    private fun isLiveStream(): Boolean = engine?.isLive ?: true
 
     /**
      * [BUG FIX] Live TV Playback Safety — RULE B: silently blocks any seek entry point for a live
@@ -769,16 +900,15 @@ class PlayerActivity : AppCompatActivity() {
         return true
     }
 
-    /** Step 10.1 fullscreen toggle — cycles LibVLC's aspect handling (best-fit ↔ fill). */
+    /** Step 10.1 fullscreen toggle — cycles the engine's aspect handling (best-fit ↔ fill). */
+    private var fillMode = false
     private fun toggleAspectRatio() {
-        val player = mediaPlayer ?: return
-        if (player.videoScale == MediaPlayer.ScaleType.SURFACE_BEST_FIT) {
-            player.videoScale = MediaPlayer.ScaleType.SURFACE_FILL
-            binding.btnFullscreen.setImageResource(R.drawable.ic_fullscreen_exit)
-        } else {
-            player.videoScale = MediaPlayer.ScaleType.SURFACE_BEST_FIT
-            binding.btnFullscreen.setImageResource(R.drawable.ic_fullscreen)
-        }
+        val player = engine ?: return
+        fillMode = !fillMode
+        player.setFillMode(fillMode)
+        binding.btnFullscreen.setImageResource(
+            if (fillMode) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen
+        )
         scheduleHideControls()
     }
 
@@ -836,16 +966,16 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun updateProgress() {
-        val player = mediaPlayer ?: return
-        val length = player.length
+        val player = engine ?: return
+        val length = player.durationMs
         if (length <= 0) return // live stream with no known duration
         binding.textDuration.text = formatTime(length)
 
         // [BUG FIX promt7] STEP_1/STEP_3 — while a D-pad seek is committing, keep the bar pinned to
-        // the captured target and refuse to write the stale (pre-seek) player.time back onto it.
-        // Resume normal tracking only once the native seek has actually landed near the target.
+        // the captured target and refuse to write the stale (pre-seek) position back onto it.
+        // Resume normal tracking only once the seek has actually landed near the target.
         if (dpadSeeking) {
-            if (kotlin.math.abs(player.time - dpadSeekTargetMs) <= DPAD_SEEK_SETTLE_TOLERANCE_MS) {
+            if (kotlin.math.abs(player.positionMs - dpadSeekTargetMs) <= DPAD_SEEK_SETTLE_TOLERANCE_MS) {
                 dpadSeeking = false
                 handler.removeCallbacks(dpadSeekSettleTimeout)
             } else {
@@ -855,27 +985,58 @@ class PlayerActivity : AppCompatActivity() {
 
         if (!userSeeking) {
             binding.seekBar.max = length.toInt()
-            binding.seekBar.progress = player.time.toInt()
-            binding.textElapsed.text = formatTime(player.time)
+            binding.seekBar.progress = player.positionMs.toInt()
+            binding.textElapsed.text = formatTime(player.positionMs)
         }
     }
 
     /**
-     * [FEATURE UPDATE] The lock icon now fades in/out together with the rest of the panel — the
-     * only exceptions are cases where it must stay hidden regardless (TV remotes don't need it,
-     * PiP has no room for it, and Lock Mode already manages its own hidden state elsewhere).
+     * [YOUTUBE-STYLE] Smooth fade in/out for the control panel.
+     * - Show: fade in 200 ms (instant feel, never laggy)
+     * - Hide: fade out 300 ms (gradual, feels natural like YouTube)
+     * The overlay stays VISIBLE (alpha=0) during the hide animation so touch/d-pad events
+     * still work until it's fully gone; GONE is only set once the fade is complete.
      */
+    private var _controlsVisible = false
+
     private fun setControlsVisible(visible: Boolean) {
-        val wasVisible = binding.controlsOverlay.visibility == View.VISIBLE
-        binding.controlsOverlay.visibility = if (visible) View.VISIBLE else View.GONE
-        if (!locked && !isTv && !isInPip()) {
-            binding.btnLock.visibility = if (visible) View.VISIBLE else View.GONE
-        }
-        // promt1 §1(2) — every time the panel goes from HIDDEN to VISIBLE, drop the remote's focus
-        // cleanly onto Play/Pause. Guarded to the actual transition so it never yanks focus back
-        // while the user is navigating a panel that's already up (CASE B spatial navigation).
-        if (visible && !wasVisible && isTv && !isInPip()) {
-            focusPlayPause()
+        if (visible == _controlsVisible) return
+        _controlsVisible = visible
+        val overlay = binding.controlsOverlay
+        val lockBtn = binding.btnLock
+
+        if (visible) {
+            // --- SHOW: snap visible then fade in ---
+            overlay.visibility = View.VISIBLE
+            overlay.animate()
+                .alpha(1f)
+                .setDuration(200)
+                .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                .withEndAction(null)
+                .start()
+            if (!locked && !isTv && !isInPip()) {
+                lockBtn.visibility = View.VISIBLE
+                lockBtn.animate().alpha(1f).setDuration(200).start()
+            }
+            // promt1 §1(2) — drop focus onto Play/Pause when panel appears on TV.
+            if (isTv && !isInPip()) focusPlayPause()
+        } else {
+            // --- HIDE: fade out then set GONE ---
+            overlay.animate()
+                .alpha(0f)
+                .setDuration(300)
+                .setInterpolator(android.view.animation.AccelerateInterpolator())
+                .withEndAction {
+                    if (!_controlsVisible) overlay.visibility = View.GONE
+                }
+                .start()
+            if (!locked && !isTv && !isInPip()) {
+                lockBtn.animate()
+                    .alpha(0f)
+                    .setDuration(300)
+                    .withEndAction { if (!_controlsVisible) lockBtn.visibility = View.GONE }
+                    .start()
+            }
         }
     }
 
@@ -895,7 +1056,7 @@ class PlayerActivity : AppCompatActivity() {
 
     /** promt1 — CASE A (hidden) vs CASE B (visible) hinges entirely on this live panel state. */
     private val controlsShowing: Boolean
-        get() = binding.controlsOverlay.visibility == View.VISIBLE
+        get() = _controlsVisible
 
     private fun isInPip(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode
@@ -908,13 +1069,13 @@ class PlayerActivity : AppCompatActivity() {
         if (locked) return
         setControlsVisible(true)
         handler.removeCallbacks(hideControlsRunnable)
-        if (mediaPlayer?.isPlaying == true) {
-            handler.postDelayed(hideControlsRunnable, CONTROLS_TIMEOUT_MS)
+        if (engine?.isPlaying == true) {
+            handler.postDelayed(hideControlsRunnable, controlsTimeoutMs)
         }
     }
 
     private fun toggleControls() {
-        if (binding.controlsOverlay.visibility == View.VISIBLE) {
+        if (_controlsVisible) {
             handler.removeCallbacks(hideControlsRunnable)
             setControlsVisible(false)
         } else {
@@ -950,13 +1111,15 @@ class PlayerActivity : AppCompatActivity() {
                 expectedSystemVolume = target
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
             }
-            mediaPlayer?.volume = VOLUME_NORMAL
+            // 0-100% is driven by hardware volume; keep the engine at its unboosted normal level.
+            engine?.setSoftwareVolume(VOLUME_NORMAL)
         } else {
             if (systemMaxVolume > 0) {
                 expectedSystemVolume = systemMaxVolume
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, systemMaxVolume, 0)
             }
-            mediaPlayer?.volume = appVolume
+            // 101-200% locks hardware at max and drives the engine's software gain boost.
+            engine?.setSoftwareVolume(appVolume)
         }
     }
 
@@ -989,17 +1152,17 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun setPlaybackSpeed(speed: Float) {
         playbackSpeed = speed
-        if (!turboActive) mediaPlayer?.rate = speed
+        if (!turboActive) engine?.speed = speed
         showIndicator(getString(R.string.player_speed_current, "${speed}x"))
     }
 
     // --- Step 11.3: audio / subtitle track OSD ------------------------------------------------
 
     private fun showTrackDialog(audio: Boolean) {
-        val player = mediaPlayer ?: return
+        val player = engine ?: return
         handler.removeCallbacks(hideControlsRunnable)
-        val tracks = if (audio) player.audioTracks else player.spuTracks
-        if (tracks.isNullOrEmpty()) {
+        val tracks = if (audio) player.audioTracks() else player.subtitleTracks()
+        if (tracks.isEmpty()) {
             Toast.makeText(
                 this,
                 if (audio) R.string.player_no_audio_tracks else R.string.player_no_subtitle_tracks,
@@ -1008,19 +1171,18 @@ class PlayerActivity : AppCompatActivity() {
             scheduleHideControls()
             return
         }
-        val names = tracks.map { it.name }.toTypedArray()
-        val currentId = if (audio) player.audioTrack else player.spuTrack
-        val checked = tracks.indexOfFirst { it.id == currentId }
+        val names = tracks.map { it.label }.toTypedArray()
+        val checked = tracks.indexOfFirst { it.selected }
         MaterialAlertDialogBuilder(this)
             .setTitle(if (audio) R.string.player_audio_track else R.string.player_subtitle_track)
             .setSingleChoiceItems(names, checked) { dialog, which ->
                 val id = tracks[which].id
-                if (audio) player.audioTrack = id else player.spuTrack = id
+                if (audio) player.selectAudioTrack(id) else player.selectSubtitleTrack(id)
                 showIndicator(
                     getString(
                         if (audio) R.string.player_osd_audio_selected
                         else R.string.player_osd_subtitle_selected,
-                        tracks[which].name
+                        tracks[which].label
                     )
                 )
                 dialog.dismiss()
@@ -1049,7 +1211,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         // Auto-PiP when the user navigates away mid-playback (Step 11.1).
-        if (mediaPlayer?.isPlaying == true && !locked) enterPipMode()
+        if (engine?.isPlaying == true && !locked) enterPipMode()
     }
 
     override fun onPictureInPictureModeChanged(isInPip: Boolean, newConfig: Configuration) {
@@ -1106,15 +1268,34 @@ class PlayerActivity : AppCompatActivity() {
                 MotionEvent.ACTION_UP -> {
                     // A "tap" is a touch-up close to where it went down, quickly, and not the
                     // tail end of a drag (seek/brightness/volume) that was already handled live.
-                    val isTap = !draggingSeek &&
+                    val wasDragging = draggingSeek || draggingBrightness || draggingVolume
+                    val isTap = !wasDragging &&
                         abs(event.x - tapDownX) < TAP_SLOP_PX &&
                         abs(event.y - tapDownY) < TAP_SLOP_PX &&
                         (event.eventTime - tapDownTime) < TAP_MAX_DURATION_MS
                     commitSeekDrag()
-                    if (isTap) handleTap(event.x)
+                    if (wasDragging) {
+                        lastSwipeEndTime = System.currentTimeMillis()
+                        draggingBrightness = false
+                        draggingVolume = false
+                    }
+                    if (isTap) {
+                        // Skip if inside 1.5s (1500ms) debounce window
+                        if (System.currentTimeMillis() - lastSwipeEndTime > 1500L) {
+                            handleTap(event.x)
+                        }
+                    }
                 }
 
-                MotionEvent.ACTION_CANCEL -> commitSeekDrag()
+                MotionEvent.ACTION_CANCEL -> {
+                    val wasDragging = draggingSeek || draggingBrightness || draggingVolume
+                    commitSeekDrag()
+                    if (wasDragging) {
+                        lastSwipeEndTime = System.currentTimeMillis()
+                        draggingBrightness = false
+                        draggingVolume = false
+                    }
+                }
             }
             true
         }
@@ -1129,23 +1310,33 @@ class PlayerActivity : AppCompatActivity() {
     private enum class TapZone { LEFT, MIDDLE, RIGHT }
 
     /**
-     * [FEATURE UPDATE] Accumulative multi-tap seek state: consecutive taps in the same edge zone,
-     * within [MULTI_TAP_TIMEOUT_MS] of each other, each add another ±[SEEK_STEP_MS] — so 2 taps
-     * = ±10s, 3 taps = ±20s, 4 taps = ±30s, and so on. A tap elsewhere, or the timeout firing,
-     * resets the streak.
+     * [FEATURE UPDATE] Verification window variables for single-tap vs. double-tap handling.
+     * Incorporates an 800ms window where a second click turns the gesture into a double-click.
      */
-    private var multiTapZone: TapZone? = null
-    private var multiTapCount = 0
-    private val multiTapResetRunnable = Runnable {
-        multiTapZone = null
-        multiTapCount = 0
+    private var pendingTapZone: TapZone? = null
+    private var tapCount = 0
+    private var controlsWereVisible = false
+    private val tapTimeoutRunnable = Runnable {
+        val zone = pendingTapZone
+        if (zone != null) {
+            if (tapCount == 1 && controlsWereVisible) {
+                // If they were visible when we tapped, and we only tapped once, hide them now
+                setControlsVisible(false)
+            }
+        }
+        tapCount = 0
+        pendingTapZone = null
     }
 
     /**
      * [FEATURE UPDATE] Dispatches a raw tap ([x] in view coordinates) to the left/right
-     * accumulative-seek zones, or treats a middle tap as play/pause (2nd tap) / show-hide
-     * controls (1st tap) — mirroring the old single/double-tap behavior but resolved instantly
-     * rather than waiting out Android's double-tap confirmation window.
+     * accumulative-seek zones, or treats a middle tap as play/pause.
+     * Incorporates a 0.8s (800ms) double-tap/click verification window:
+     *  - Single Tap (only one tap detected, after 800ms timeout): Toggles the controls (shows/hides controlsOverlay).
+     *    To prevent lag, if controls are hidden, they are shown INSTANTLY on the first tap.
+     *  - Double Tap (two or more taps within 800ms):
+     *      - Left/Right zones: Skips +/-10s per tap.
+     *      - Middle zone: Toggles play/pause instantly.
      */
     private fun handleTap(x: Float) {
         val width = binding.playerRoot.width
@@ -1155,31 +1346,89 @@ class PlayerActivity : AppCompatActivity() {
             else -> TapZone.MIDDLE
         }
 
-        handler.removeCallbacks(multiTapResetRunnable)
-        if (zone == multiTapZone) multiTapCount++ else {
-            multiTapZone = zone
-            multiTapCount = 1
-        }
-
-        when (zone) {
-            TapZone.LEFT, TapZone.RIGHT -> {
-                if (multiTapCount >= 2) {
-                    seekBy(if (zone == TapZone.RIGHT) SEEK_STEP_MS else -SEEK_STEP_MS, showControls = false)
-                } else {
-                    toggleControls()
-                }
+        if (zone != pendingTapZone) {
+            // Cancel previous pending single tap and execute it immediately to avoid delays
+            handler.removeCallbacks(tapTimeoutRunnable)
+            if (pendingTapZone != null && tapCount == 1 && controlsWereVisible) {
+                setControlsVisible(false)
             }
+            tapCount = 1
+            pendingTapZone = zone
+            controlsWereVisible = _controlsVisible
 
-            TapZone.MIDDLE -> {
-                if (multiTapCount >= 2) {
-                    togglePlayPause()
-                    multiTapCount = 0
-                } else {
-                    toggleControls()
+            if (!_controlsVisible) {
+                // Instantly show controls if they were hidden — no 800ms delay to make it feel responsive
+                scheduleHideControls()
+            }
+            handler.postDelayed(tapTimeoutRunnable, TOUCH_DOUBLE_TAP_TIMEOUT_MS)
+        } else {
+            handler.removeCallbacks(tapTimeoutRunnable)
+            tapCount++
+            if (tapCount >= 2) {
+                when (zone) {
+                    TapZone.LEFT, TapZone.RIGHT -> {
+                        val seconds = (tapCount - 1) * 10
+                        showDoubleTapSeekFeedback(zone, seconds)
+                        seekBy(
+                            if (zone == TapZone.RIGHT) SEEK_STEP_MS else -SEEK_STEP_MS,
+                            showControls = false,
+                            showCenterIndicator = false
+                        )
+                        // Post timeout to reset the multi-tap streak if they stop tapping,
+                        // but since tapCount >= 2 it won't toggle controls.
+                        handler.postDelayed(tapTimeoutRunnable, TOUCH_DOUBLE_TAP_TIMEOUT_MS)
+                    }
+                    TapZone.MIDDLE -> {
+                        togglePlayPause()
+                        // Reset middle tap streak immediately so next click doesn't instantly play/pause
+                        tapCount = 0
+                        pendingTapZone = null
+                    }
                 }
+            } else {
+                if (!_controlsVisible) {
+                    scheduleHideControls()
+                }
+                handler.postDelayed(tapTimeoutRunnable, TOUCH_DOUBLE_TAP_TIMEOUT_MS)
             }
         }
-        handler.postDelayed(multiTapResetRunnable, MULTI_TAP_TIMEOUT_MS)
+    }
+
+    /**
+     * [FEATURE UPDATE] Shows a premium YouTube-style double-tap overlay feedback on the left or
+     * right side of the screen with a curved background, arrow shifting animation, and accumulated seconds.
+     */
+    private fun showDoubleTapSeekFeedback(zone: TapZone, seconds: Int) {
+        val layout = if (zone == TapZone.LEFT) binding.leftDoubleTapLayout else binding.rightDoubleTapLayout
+        val secondsText = if (zone == TapZone.LEFT) binding.textLeftDoubleTapSeconds else binding.textRightDoubleTapSeconds
+        val arrowsText = if (zone == TapZone.LEFT) binding.textLeftDoubleTapArrows else binding.textRightDoubleTapArrows
+        val hideRunnable = if (zone == TapZone.LEFT) hideLeftDoubleTapRunnable else hideRightDoubleTapRunnable
+        
+        secondsText.text = "$seconds seconds"
+        
+        handler.removeCallbacks(hideRunnable)
+        layout.animate().cancel()
+        
+        if (layout.visibility != View.VISIBLE) {
+            layout.alpha = 0f
+            layout.visibility = View.VISIBLE
+        }
+        
+        layout.animate()
+            .alpha(1f)
+            .setDuration(100)
+            .start()
+            
+        handler.postDelayed(hideRunnable, 800)
+            
+        // Quick arrow shifting animation (YouTube style)
+        arrowsText.animate().cancel()
+        arrowsText.translationX = if (zone == TapZone.LEFT) 20f else -20f
+        arrowsText.animate()
+            .translationX(0f)
+            .setDuration(300)
+            .setInterpolator(android.view.animation.CycleInterpolator(2f))
+            .start()
     }
 
     /**
@@ -1208,13 +1457,11 @@ class PlayerActivity : AppCompatActivity() {
 
     private inner class GestureListener : GestureDetector.SimpleOnGestureListener() {
 
-        private var draggingBrightness = false
-        private var draggingVolume = false
-
         override fun onDown(e: MotionEvent): Boolean {
             draggingBrightness = false
             draggingVolume = false
             draggingSeek = false
+            volumeAccumulator = 0f
             return true
         }
 
@@ -1232,7 +1479,9 @@ class PlayerActivity : AppCompatActivity() {
                     // brightness/volume, which would misread an intended horizontal seek swipe).
                     if (isLiveStream()) return true
                     draggingSeek = true
-                    seekDragStartPositionMs = mediaPlayer?.time ?: 0L
+                    seekDragStartPositionMs = engine?.positionMs ?: 0L
+                    seekPreviewTargetMs = seekDragStartPositionMs
+                    seekDragControlsWereVisible = _controlsVisible
                 } else {
                     val leftHalf = e1.x < binding.playerRoot.width / 2f
                     // Gesture rework — brightness (left) is disabled on TVs; there the whole surface
@@ -1241,7 +1490,7 @@ class PlayerActivity : AppCompatActivity() {
                 }
             }
             if (draggingSeek) {
-                updateSeekPreview(dx)
+                updateSeekPreviewIncremental(distanceX)
                 return true
             }
             // promt1 fix — GestureDetector's distanceY is (previousY - currentY), i.e. POSITIVE when
@@ -1254,27 +1503,40 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * [FEATURE UPDATE] Live preview for an in-progress horizontal drag: [totalDx] is the
-     * cumulative distance from where the finger first touched down (screen-width relative),
-     * mapped onto [SEEK_DRAG_RANGE_MS] of timeline per full swipe. Only updates [seekPreviewTargetMs]
-     * and the OSD — the actual seek happens once on release, via [commitSeekDrag].
+     * [FEATURE UPDATE] YouTube-style dynamic swipe-to-seek:
+     * Accumulates incremental deltas (-[distanceX]) multiplied by a dynamic sensitivity factor
+     * that scales with the video's total duration. Applies non-linear acceleration if the swipe
+     * speed is high.
      */
-    private fun updateSeekPreview(totalDx: Float) {
-        val player = mediaPlayer ?: return
-        val length = player.length
+    private fun updateSeekPreviewIncremental(distanceX: Float) {
+        val player = engine ?: return
+        val length = player.durationMs
         val maxTime = if (length > 0) length else Long.MAX_VALUE
-        val fraction = totalDx / binding.playerRoot.width
-        val deltaMs = (fraction * SEEK_DRAG_RANGE_MS).toLong()
-        seekPreviewTargetMs = (seekDragStartPositionMs + deltaMs).coerceIn(0L, maxTime)
+        
+        // Base sensitivity scales with duration (e.g. duration / 2000 ms per pixel).
+        // Capped to stay controllable: min 50ms/px (short video), max 3000ms/px (long movie).
+        // Multiplied by user-defined sensitivity percent (e.g. 50% -> 0.5x, 200% -> 2.0x).
+        val multiplier = swipeSensitivityPercent.toFloat() / 100f
+        val msPerPx = if (length > 0) {
+            ((length.toFloat() / 2000f) * multiplier).coerceIn(5f, 10000f)
+        } else {
+            500f * multiplier
+        }
+        
+        val speed = abs(distanceX)
+        val acceleration = if (speed > 5f) {
+            1f + (speed - 5f) * 0.2f
+        } else {
+            1f
+        }
+        
+        val deltaMs = (-distanceX * msPerPx * acceleration).toLong()
+        seekPreviewTargetMs = (seekPreviewTargetMs + deltaMs).coerceIn(0L, maxTime)
+        
         val actualDeltaMs = seekPreviewTargetMs - seekDragStartPositionMs
-        val deltaLabel = formatTime(abs(actualDeltaMs))
-        showIndicator(
-            getString(
-                if (actualDeltaMs >= 0) R.string.player_gesture_seek_drag_forward
-                else R.string.player_gesture_seek_drag_backward,
-                deltaLabel
-            )
-        )
+        val targetLabel = formatTime(seekPreviewTargetMs)
+        val icon = if (actualDeltaMs >= 0) "▶▶ " else "◀◀ "
+        showIndicator(icon + targetLabel)
     }
 
     /** [FEATURE UPDATE] Applies the previewed target position once the drag gesture ends. */
@@ -1284,11 +1546,24 @@ class PlayerActivity : AppCompatActivity() {
         // RULE B — defense in depth: even if a drag was already in flight when the stream flipped
         // live (e.g. mid-buffering), never commit the seek.
         if (isLiveStream()) {
-            scheduleHideControls()
+            if (seekDragControlsWereVisible) {
+                scheduleHideControls()
+            }
             return
         }
-        mediaPlayer?.time = seekPreviewTargetMs
-        scheduleHideControls()
+        
+        seekControlsWereVisible = seekDragControlsWereVisible
+        lastSeekTime = System.currentTimeMillis()
+        engine?.seekTo(seekPreviewTargetMs)
+        
+        if (seekDragControlsWereVisible) {
+            scheduleHideControls()
+        } else {
+            // If controls were hidden when the swipe started, keep them hidden.
+            // The center gesture indicator will fade out automatically.
+            handler.removeCallbacks(hideControlsRunnable)
+            setControlsVisible(false)
+        }
     }
 
     /**
@@ -1296,21 +1571,25 @@ class PlayerActivity : AppCompatActivity() {
      * [showControls] — double-tap seek (touch) should show only the +10s/-10s indicator, not the
      * full title/seekbar panel; D-pad seek uses [seekSilently] instead, which never shows the panel.
      */
-    private fun seekBy(deltaMs: Long, showControls: Boolean = true) {
-        val player = mediaPlayer ?: return
+    private fun seekBy(deltaMs: Long, showControls: Boolean = true, showCenterIndicator: Boolean = true) {
+        val player = engine ?: return
         // RULE B — touch-based edge-zone seek is blocked for live the same as D-pad seek.
         if (blockIfLiveSeek()) return
-        val length = player.length
-        val target = (player.time + deltaMs).coerceIn(0L, if (length > 0) length else Long.MAX_VALUE)
-        player.time = target
-        val seconds = (abs(deltaMs) / 1000).toInt()
-        showIndicator(
-            getString(
-                if (deltaMs >= 0) R.string.player_gesture_seek_forward
-                else R.string.player_gesture_seek_backward,
-                seconds
+        val length = player.durationMs
+        val target = (player.positionMs + deltaMs).coerceIn(0L, if (length > 0) length else Long.MAX_VALUE)
+        seekControlsWereVisible = showControls && _controlsVisible
+        lastSeekTime = System.currentTimeMillis()
+        player.seekTo(target)
+        if (showCenterIndicator) {
+            val seconds = (abs(deltaMs) / 1000).toInt()
+            showIndicator(
+                getString(
+                    if (deltaMs >= 0) R.string.player_gesture_seek_forward
+                    else R.string.player_gesture_seek_backward,
+                    seconds
+                )
             )
-        )
+        }
         if (showControls) {
             scheduleHideControls()
         } else {
@@ -1325,20 +1604,22 @@ class PlayerActivity : AppCompatActivity() {
      * (see [showSeekTimeIndicator]) rather than the "+Ns" pill or full overlay.
      */
     private fun seekSilently(deltaMs: Long) {
-        val player = mediaPlayer ?: return
+        val player = engine ?: return
         // RULE B — the primary named trigger: D-pad Left/Right 10s/30s seek is fully blocked live.
         if (blockIfLiveSeek()) return
-        val length = player.length
+        val length = player.durationMs
         // [BUG FIX promt7] STEP_2 — accumulate from the last captured target rather than the (possibly
-        // stale) live player.time, so rapid consecutive presses add up correctly instead of collapsing
+        // stale) live position, so rapid consecutive presses add up correctly instead of collapsing
         // back onto an old, not-yet-committed position.
-        val base = if (dpadSeeking) dpadSeekTargetMs else player.time
+        val base = if (dpadSeeking) dpadSeekTargetMs else player.positionMs
         val target = (base + deltaMs).coerceIn(0L, if (length > 0) length else Long.MAX_VALUE)
         // STEP_1 — suspend the ticker's write-back so the async seek can't be overridden mid-flight.
         dpadSeeking = true
         dpadSeekTargetMs = target
         // STEP_3 — commit the explicit player seek.
-        player.time = target
+        seekControlsWereVisible = false
+        lastSeekTime = System.currentTimeMillis()
+        player.seekTo(target)
         // Reflect the committed target on the UI immediately so it never flashes the old position.
         if (length > 0) {
             binding.seekBar.max = length.toInt()
@@ -1380,8 +1661,14 @@ class PlayerActivity : AppCompatActivity() {
      * (101%, 102%, …, 200%). No dedicated button; handled purely via gesture.
      */
     private fun adjustVolume(fraction: Float) {
-        val next = (appVolume + (fraction * VOLUME_BOOSTED)).toInt()
-        setVolume(next)
+        // [FIX] Accumulate the fractional changes at 40% (0.4f) multiplier to keep swipe seeking buttery smooth
+        volumeAccumulator += fraction * VOLUME_BOOSTED * 0.4f
+        val change = volumeAccumulator.toInt()
+        if (change != 0) {
+            val next = (appVolume + change).coerceIn(0, VOLUME_BOOSTED)
+            setVolume(next)
+            volumeAccumulator -= change
+        }
         showIndicator(getString(R.string.player_gesture_volume, appVolume))
     }
 
@@ -1628,14 +1915,14 @@ class PlayerActivity : AppCompatActivity() {
         if (turboActive) return
         turboActive = true
         speedBeforeTurbo = playbackSpeed
-        mediaPlayer?.rate = TURBO_RATE
+        engine?.speed = TURBO_RATE
         showIndicator(getString(R.string.player_speed_holding))
     }
 
     private fun stopTurbo() {
         if (!turboActive) return
         turboActive = false
-        mediaPlayer?.rate = speedBeforeTurbo
+        engine?.speed = speedBeforeTurbo
         showIndicator(getString(R.string.player_speed_current, "${speedBeforeTurbo}x"))
     }
 
@@ -1675,7 +1962,11 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showError(message: String) {
         binding.progressLoading.visibility = View.GONE
+        // Cancel any in-progress animation and force-hide; bypass smooth fade for errors.
+        binding.controlsOverlay.animate().cancel()
+        binding.controlsOverlay.alpha = 0f
         binding.controlsOverlay.visibility = View.GONE
+        _controlsVisible = false
         binding.textError.text = message
         binding.textError.visibility = View.VISIBLE
     }
@@ -1690,11 +1981,17 @@ class PlayerActivity : AppCompatActivity() {
         // Keep playing while in PiP; only pause when the activity is genuinely backgrounded.
         val inPip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode
         if (!inPip) {
-            mediaPlayer?.pause()
+            engine?.pause()
             handler.removeCallbacks(progressTicker)
             // [BUG FIX promt7] Don't leave a D-pad seek's settle guard armed across a background stop.
             handler.removeCallbacks(dpadSeekSettleTimeout)
             dpadSeeking = false
+        } else {
+            engine?.pause()
+            handler.removeCallbacks(progressTicker)
+            handler.removeCallbacks(dpadSeekSettleTimeout)
+            dpadSeeking = false
+            finish()
         }
     }
 
@@ -1707,13 +2004,9 @@ class PlayerActivity : AppCompatActivity() {
         }
         resumeScope.cancel()
         handler.removeCallbacksAndMessages(null)
-        mediaPlayer?.let { player ->
-            player.setEventListener(null)
-            player.stop()
-            player.detachViews()
-            player.release()
-        }
-        mediaPlayer = null
+        // Media3 migration — release both engines (ExoPlayer + VLC fallback) and their surfaces.
+        engine?.release()
+        engine = null
         // The shared LibVLC engine is a Hilt singleton — do NOT release it here.
     }
 
@@ -1733,10 +2026,24 @@ class PlayerActivity : AppCompatActivity() {
         val httpReferrer: String?,
         val httpUserAgent: String?,
         /** promt5 — owning playlist; the resume-isolation key used when saving/reading positions. */
-        val playlistId: Long
+        val playlistId: Long,
+        /**
+         * promt2 — playlist-declared Live/VOD hint (from `#EXTINF:`), used at load time to pick the
+         * buffering profile before the real stream length is known. The runtime [isLiveStream] check
+         * still governs everything after playback starts; this only steers the initial cache sizing.
+         */
+        val isLive: Boolean
     )
 
     companion object {
+        /**
+         * In-memory hand-off for the Next/Previous queue. A large "All Channels" list (thousands of
+         * movie/VOD entries) can't ride in the launch Intent — it blows past Binder's ~1 MB limit and
+         * crashes with TransactionTooLargeException. So [newIntent] stashes the full queue here and
+         * [parseQueue] consumes it (clearing it immediately). The Intent still carries the single start
+         * item as a fallback for the process-death case, where this static is gone.
+         */
+        private var queueMemoryHolder: List<QueueItem>? = null
         /**
          * Process-lifetime scope for resume-point DB writes. Deliberately NOT tied to the activity:
          * the exit save fired from [onStop] must finish even after [onDestroy] cancels the
@@ -1749,6 +2056,8 @@ class PlayerActivity : AppCompatActivity() {
         private const val EXTRA_QUEUE_REFERRERS = "extra_queue_referrers"
         private const val EXTRA_QUEUE_USER_AGENTS = "extra_queue_user_agents"
         private const val EXTRA_QUEUE_PLAYLIST_IDS = "extra_queue_playlist_ids"
+        // promt2 — per-item Live/VOD hint, parallel to the URL/title arrays, drives cache sizing.
+        private const val EXTRA_QUEUE_IS_LIVE = "extra_queue_is_live"
         private const val EXTRA_QUEUE_INDEX = "extra_queue_index"
 
         /** promt5 — when > 0, resume the opened video directly at this offset, skipping the prompt. */
@@ -1762,7 +2071,6 @@ class PlayerActivity : AppCompatActivity() {
         /** Step 11.2 — selectable speeds (0.5x–2.0x). */
         private val SPEEDS = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 
-        private const val CONTROLS_TIMEOUT_MS = 3500L
         private const val INDICATOR_TIMEOUT_MS = 800L
 
         /** promt4 §1 — autosave cadence, the minimum watch time before a session is stored, and the
@@ -1803,8 +2111,8 @@ class PlayerActivity : AppCompatActivity() {
         /** [FEATURE UPDATE] Left/right fraction of the screen width that triggers seek taps. */
         private const val SEEK_ZONE_FRACTION = 0.3f
 
-        /** [FEATURE UPDATE] Silence window that ends a multi-tap seek streak. */
-        private const val MULTI_TAP_TIMEOUT_MS = 900L
+        /** [FEATURE UPDATE] Silence window that ends a double-tap / multi-tap verification. */
+        private const val TOUCH_DOUBLE_TAP_TIMEOUT_MS = 800L
 
         /** [FEATURE UPDATE] Minimum top-to-bottom drag distance to unlock while in Lock Mode. */
         private const val SWIPE_UNLOCK_THRESHOLD_PX = 120f
@@ -1820,21 +2128,33 @@ class PlayerActivity : AppCompatActivity() {
             startIndex: Int,
             resumePositionMs: Long = -1L
         ): Intent {
-            val urls = ArrayList(channels.map { it.url })
-            val titles = ArrayList(channels.map { it.name })
-            val referrers = ArrayList(channels.map { it.httpReferrer.orEmpty() })
-            val userAgents = ArrayList(channels.map { it.httpUserAgent.orEmpty() })
-            val playlistIds = channels.map { it.playlistId }.toLongArray()
-            return Intent(context, PlayerActivity::class.java)
-                .putStringArrayListExtra(EXTRA_QUEUE_URLS, urls)
-                .putStringArrayListExtra(EXTRA_QUEUE_TITLES, titles)
-                .putStringArrayListExtra(EXTRA_QUEUE_REFERRERS, referrers)
-                .putStringArrayListExtra(EXTRA_QUEUE_USER_AGENTS, userAgents)
-                // promt5 — per-item playlist id, the resume-isolation key.
-                .putExtra(EXTRA_QUEUE_PLAYLIST_IDS, playlistIds)
+            // Option 1: In-memory hand-off to prevent TransactionTooLargeException
+            queueMemoryHolder = channels.map {
+                QueueItem(
+                    url = it.url,
+                    title = it.name,
+                    httpReferrer = it.httpReferrer.orEmpty().takeIf { ref -> ref.isNotBlank() },
+                    httpUserAgent = it.httpUserAgent.orEmpty().takeIf { ua -> ua.isNotBlank() },
+                    playlistId = it.playlistId,
+                    isLive = it.isLive
+                )
+            }
+
+            val intent = Intent(context, PlayerActivity::class.java)
                 .putExtra(EXTRA_QUEUE_INDEX, startIndex)
                 // promt5 — forced resume offset; -1 means "no forced resume" (normal prompt flow).
                 .putExtra(EXTRA_RESUME_POSITION_MS, resumePositionMs)
+                
+            val fallback = channels.getOrNull(startIndex)
+            if (fallback != null) {
+                intent.putStringArrayListExtra(EXTRA_QUEUE_URLS, arrayListOf(fallback.url))
+                intent.putStringArrayListExtra(EXTRA_QUEUE_TITLES, arrayListOf(fallback.name))
+                intent.putStringArrayListExtra(EXTRA_QUEUE_REFERRERS, arrayListOf(fallback.httpReferrer.orEmpty()))
+                intent.putStringArrayListExtra(EXTRA_QUEUE_USER_AGENTS, arrayListOf(fallback.httpUserAgent.orEmpty()))
+                intent.putExtra(EXTRA_QUEUE_PLAYLIST_IDS, longArrayOf(fallback.playlistId))
+                intent.putExtra(EXTRA_QUEUE_IS_LIVE, booleanArrayOf(fallback.isLive))
+            }
+            return intent
         }
 
         /** Convenience overload for launching a single channel with no Next/Previous queue. */

@@ -45,6 +45,13 @@ class ChannelListViewModel @Inject constructor(
      */
     val favoritesOnly: Boolean = savedStateHandle.get<Boolean>("favoritesOnly") ?: false
 
+    /**
+     * Optional contentType filter set by the "All Movies" tile ("MOVIE") or a series subfolder
+     * tile ("SERIES"). Null means no contentType filter. Combined with [groupName] for series
+     * episode lists (groupName = series folder, contentFilter = "SERIES").
+     */
+    val contentFilter: String? = savedStateHandle.get<String>("contentFilter")?.takeIf { it.isNotBlank() }
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -55,7 +62,16 @@ class ChannelListViewModel @Inject constructor(
     /** Channels for this group in playlist order — the source for both the list and the search index. */
     private val allChannels: StateFlow<List<Channel>> =
         getChannelsForPlaylistUseCase(playlistId, groupName)
-            .map { list -> if (favoritesOnly) list.filter { it.isFavorite } else list }
+            .map { list ->
+                var filtered = if (favoritesOnly) list.filter { it.isFavorite } else list
+                // Apply contentType filter when set (MOVIE / SERIES)
+                if (!contentFilter.isNullOrBlank()) {
+                    filtered = filtered.filter { ch ->
+                        ch.contentType.equals(contentFilter, ignoreCase = true)
+                    }
+                }
+                filtered
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
@@ -134,8 +150,35 @@ class ChannelListViewModel @Inject constructor(
         viewModelScope.launch { toggleFavoriteChannelUseCase(channel) }
     }
 
+    /**
+     * True when ≥60% of the unfiltered playlist is MOVIE/SERIES content — mirrors the Folder screen's
+     * "All Movies" tile so the toolbar title on the unfiltered all-channels screen matches the tile.
+     * Computed over the whole playlist (ignoring [groupName]/[favoritesOnly]) so a single genuine
+     * movie folder never accidentally relabels the header.
+     */
+    val movieDominant: StateFlow<Boolean> =
+        getChannelsForPlaylistUseCase(playlistId)
+            .map { list ->
+                if (list.isEmpty()) {
+                    false
+                } else {
+                    val movieOrSeries = list.count {
+                        it.contentType == com.mdaksh.m3uvideoplayer.domain.model.ContentType.MOVIE ||
+                            it.contentType == com.mdaksh.m3uvideoplayer.domain.model.ContentType.SERIES
+                    }
+                    movieOrSeries.toFloat() / list.size >= MOVIE_DOMINANT_FRACTION
+                }
+            }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     /** Step 4.5 — persist the user's pick; [viewMode] then re-emits and the UI updates. */
     fun setViewMode(mode: ChannelViewMode) {
         viewModelScope.launch { userPreferencesRepository.setViewMode(mode) }
+    }
+
+    private companion object {
+        /** ≥60% MOVIE/SERIES content shows "All Movies" instead of "All channels". */
+        const val MOVIE_DOMINANT_FRACTION = 0.6f
     }
 }

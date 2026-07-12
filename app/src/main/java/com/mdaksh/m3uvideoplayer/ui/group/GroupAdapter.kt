@@ -18,12 +18,18 @@ import com.mdaksh.m3uvideoplayer.databinding.ItemGroupListBinding
  * marks the synthetic "Favorite" tile pinned at position 2 — both ignore the folder Sort Filter and,
  * when tapped, open the channel list filtered accordingly (unfiltered / favorites-only). Their
  * [name] is blank — the label comes from a string resource at bind time.
+ *
+ * On movie/series playlists the "All channels" tile is replaced by two synthetic tiles:
+ * [isAllMovies] (a flat list of MOVIE content) and [isAllSeries] (a sub-screen of per-series
+ * folders). Both are pinned ahead of "Favorite" and ignore the Sort Filter.
  */
 data class GroupItem(
     val name: String,
     val channelCount: Int,
     val isAllChannels: Boolean = false,
-    val isFavorites: Boolean = false
+    val isFavorites: Boolean = false,
+    val isAllMovies: Boolean = false,
+    val isAllSeries: Boolean = false
 )
 
 /**
@@ -87,6 +93,8 @@ class GroupAdapter(
 
     companion object {
         private fun labelFor(group: GroupItem, context: android.content.Context): String = when {
+            group.isAllMovies -> context.getString(R.string.all_movies)
+            group.isAllSeries -> context.getString(R.string.all_series)
             group.isAllChannels -> context.getString(R.string.all_channels)
             group.isFavorites -> context.getString(R.string.favorite)
             else -> group.name
@@ -97,6 +105,8 @@ class GroupAdapter(
 
         /** Stable identity key: the two synthetic tiles both have a blank [GroupItem.name]. */
         private fun key(group: GroupItem): String = when {
+            group.isAllMovies -> "__all_movies__"
+            group.isAllSeries -> "__all_series__"
             group.isAllChannels -> "__all_channels__"
             group.isFavorites -> "__favorites__"
             else -> group.name

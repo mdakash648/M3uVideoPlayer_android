@@ -44,12 +44,14 @@ class PlaylistFragment : Fragment() {
                 )
             },
             onResume = { target ->
-                // Floating Resume Button engine — RULE B / LOGIC_2: live channels bypass positionMs
-                // entirely and relaunch at the real-time edge (-1 = no seek).
+                // [FIX] Build the full folder queue so Next/Previous navigate within the same group.
                 val resumePos = if (target.isLive) -1L else target.positionMs
-                startActivity(
-                    PlayerActivity.newIntent(requireContext(), target.channel, resumePos)
-                )
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val (queue, startIndex) = viewModel.buildResumeQueue(target)
+                    startActivity(
+                        PlayerActivity.newIntent(requireContext(), queue, startIndex, resumePos)
+                    )
+                }
             }
         )
         binding.recyclerViewPlaylists.adapter = adapter
