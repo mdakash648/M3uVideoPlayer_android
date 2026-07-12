@@ -45,7 +45,7 @@ A powerful and modern IPTV player for Android, designed for both mobile devices 
 
 ## 📦 Download & Installation
 
-You can find the latest APK in the [Releases](/releases/download/v1.0.1/M3uVideoPlayer.apk) section.
+You can find the latest APK in the [Releases](releases/tag/v1.0.1) section.
 
 ---
 
