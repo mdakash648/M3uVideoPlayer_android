@@ -33,6 +33,8 @@ android {
         viewBinding = true
     }
     compileOptions {
+        // Enables java.time (ZoneId, Instant, etc.) on API < 26 for the timezone system.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -89,6 +91,9 @@ dependencies {
 
     // DataStore (persisted user preferences, e.g. channel view mode)
     implementation(libs.datastore.preferences)
+
+    // Backport of java.time for the timezone system on minSdk 24 (see isCoreLibraryDesugaringEnabled).
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)

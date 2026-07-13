@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.util.Rational
 import android.view.GestureDetector
@@ -36,6 +37,8 @@ import com.mdaksh.m3uvideoplayer.databinding.ActivityPlayerBinding
 import com.mdaksh.m3uvideoplayer.domain.model.Channel
 import com.mdaksh.m3uvideoplayer.domain.usecase.SavePlaylistResumePointUseCase
 import com.mdaksh.m3uvideoplayer.util.DeviceUtils
+import com.mdaksh.m3uvideoplayer.util.QualityUrlParser
+import com.mdaksh.m3uvideoplayer.util.StreamUrl
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -149,6 +152,63 @@ class PlayerActivity : AppCompatActivity() {
         get() = currentQueueItem?.httpReferrer
     private val httpUserAgent: String?
         get() = currentQueueItem?.httpUserAgent
+
+    // --- promt2: Virtual Quality Manager ------------------------------------------------------
+    //
+    // Items B/C/D. Some providers host a title's qualities as SEPARATE physical URLs that differ
+    // only by a resolution token (…_1080p.mp4 / …_720p.mp4 / …_480p.mp4). Neither ExoPlayer nor
+    // LibVLC can adapt across distinct URLs — only inside one master playlist — so this layer derives
+    // the alternates with [QualityUrlParser], offers a manual picker, falls back down the ladder on
+    // an early load failure, and emulates "Auto" by watching buffering/handshake timing.
+    //
+    // EVERYTHING here is inert for a single-variant stream ([qualityVariants].size <= 1): the button
+    // stays GONE, no fallback fires, no auto-mode runs — behaviour is byte-for-byte the old path.
+
+    /** The generated quality ladder for the current item's base URL (high→low), or one Original entry. */
+    private var qualityVariants: List<QualityUrlParser.Variant> = emptyList()
+
+    /** Index into [qualityVariants] currently being played. */
+    private var currentQualityIndex: Int = 0
+
+    /** The item URL [qualityVariants] was generated from, so a replay (recovery/resume) never regenerates. */
+    private var qualityBaseUrl: String? = null
+
+    /** The inline `|Header=…` suffix of the item URL, re-appended to every swapped variant URL. */
+    private var qualityHeaderSuffix: String = ""
+
+    /** Item D — true while "Auto" is selected; the observer may then swap quality on network signals. */
+    private var autoQualityEnabled: Boolean = true
+
+    /** True only for a URL that yielded a real ladder (more than the sole Original entry). */
+    private val hasQualityOptions: Boolean get() = qualityVariants.size > 1
+
+    /** Item D — SystemClock stamp when the current variant's load began, for the handshake timer. */
+    private var qualityLoadStartedAt: Long = 0L
+
+    /** Item D — true until the current variant renders its first frame (onReady), gating the handshake check. */
+    private var awaitingFirstFrame: Boolean = false
+
+    /** Item D — rolling count of buffering stalls seen since the last render, for the repeat-stall downgrade. */
+    private var recentBufferingStalls: Int = 0
+
+    /** Item D — SystemClock stamp of the last uninterrupted-playback upgrade, to rate-limit upgrades. */
+    private var lastAutoUpgradeAt: Long = 0L
+
+    /** Item D — SystemClock stamp when the current variant last entered a smooth (non-buffering) window. */
+    private var smoothPlaybackSince: Long = 0L
+
+    /** Item B — while true, an [onError]/[onReady] belongs to a quality/fallback swap, not the user's stream. */
+    private var qualitySwapInFlight: Boolean = false
+
+    /** Item D — resets the stall counter after a clean window, so old stalls don't trigger a late downgrade. */
+    private val clearBufferingStallsRunnable = Runnable { recentBufferingStalls = 0 }
+
+    /** Item D — fires if the current variant's handshake exceeds the budget before the first frame. */
+    private val handshakeTimeoutRunnable = Runnable {
+        if (awaitingFirstFrame && autoQualityEnabled && hasQualityOptions) {
+            onSlowHandshake()
+        }
+    }
 
     /** Step 9.4 / gesture rework — LibVLC software gain, 0..200 (%). */
     private var appVolume = VOLUME_NORMAL
@@ -435,6 +495,9 @@ class PlayerActivity : AppCompatActivity() {
      * prompts — it simply starts over.
      */
     private fun startInitialPlayback(url: String) {
+        // promt2 — derive the quality ladder for this item before its first load, so the picker
+        // button and any fallback are ready the moment playback starts.
+        prepareQualityVariants()
         // promt5 — a forced-resume launch (from the floating resume FAB) skips the DB check and the
         // Continue/Start-Over prompt entirely: it plays straight from the caller-supplied offset.
         val forcedResumeMs = intent.getLongExtra(EXTRA_RESUME_POSITION_MS, -1L)
@@ -546,16 +609,210 @@ class PlayerActivity : AppCompatActivity() {
         // promt1 §1(1) — a brand-new load; the upcoming ready event snaps focus to Play/Pause.
         pendingFocusOnPlay = true
 
+        // promt1 — a stream URL may carry its required headers inline as `url|Referer=…&User-Agent=…`
+        // (Kodi/VLC pipe form). Split them off here so the player opens the bare URL and the server
+        // gets the Referer/User-Agent it needs (otherwise it 403s). Inline headers win; fall back to
+        // the channel's #EXTVLCOPT headers when the URL has none.
+        val parsed = StreamUrl.parse(url)
+
         // Media3 migration — hand the stream to the engine controller. ExoPlayer buffers segments,
         // does adaptive bitrate and rolling eviction natively (no more HLS proxy); if it can't open
         // the stream it silently falls back to LibVLC. Headers + resume offset are passed through.
         engine?.load(
-            url = url,
-            referrer = httpReferrer,
-            userAgent = httpUserAgent,
+            url = parsed.url,
+            referrer = parsed.referrer ?: httpReferrer,
+            userAgent = parsed.userAgent ?: httpUserAgent,
             startMs = startMs,
             forceSoftwareDecode = forceSoftwareDecode
         )
+
+        // promt2 Item D — (re)arm the handshake stopwatch for this variant load. No-op for a
+        // single-variant stream or when Auto is off, so ordinary playback is untouched.
+        armQualityLoadTimers()
+    }
+
+    // --- promt2: Virtual Quality Manager (Items B/C/D) ----------------------------------------
+
+    /**
+     * Item A hook — derive the quality ladder for the CURRENT item's base URL and refresh the
+     * picker button. Called once per item (initial open / Next / Previous), NOT on the internal
+     * replays ([play] re-invocations for live-resume, surface recovery, or a quality swap) so a
+     * replay never regenerates the ladder or resets the selected quality under us.
+     *
+     * The item URL may carry an inline `|Header=…` suffix; that is stripped for [QualityUrlParser]
+     * (which needs a clean URL) and stashed in [qualityHeaderSuffix] to be re-appended to every
+     * swapped variant so protected streams keep their headers.
+     */
+    private fun prepareQualityVariants() {
+        val rawUrl = currentQueueItem?.url.orEmpty()
+        if (rawUrl == qualityBaseUrl) return  // same item being replayed — keep existing ladder/state
+        qualityBaseUrl = rawUrl
+
+        val pipe = rawUrl.indexOf('|')
+        val cleanUrl = if (pipe >= 0) rawUrl.substring(0, pipe) else rawUrl
+        qualityHeaderSuffix = if (pipe >= 0) rawUrl.substring(pipe) else ""
+
+        qualityVariants = QualityUrlParser.variants(cleanUrl)
+        currentQualityIndex = QualityUrlParser.detectedIndex(cleanUrl, qualityVariants)
+
+        // A fresh item resets Auto mode and all of the observer's rolling counters.
+        autoQualityEnabled = true
+        recentBufferingStalls = 0
+        awaitingFirstFrame = false
+        smoothPlaybackSince = 0L
+        lastAutoUpgradeAt = 0L
+        qualitySwapInFlight = false
+        handler.removeCallbacks(handshakeTimeoutRunnable)
+        handler.removeCallbacks(clearBufferingStallsRunnable)
+
+        updateQualityButtonState()
+    }
+
+    /** Item C — show/hide the picker button; the menu only appears when a real ladder exists. */
+    private fun updateQualityButtonState() {
+        binding.btnQuality.visibility = if (hasQualityOptions) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Item C — the manual quality menu. Entry 0 is Auto (Item D); the rest are the ladder rungs
+     * (1080p / 720p / 480p) as separate physical URLs. Selecting a rung pins that quality and
+     * disables Auto; selecting Auto re-enables the network-aware observer.
+     */
+    private fun showQualityDialog() {
+        if (!hasQualityOptions) return
+        handler.removeCallbacks(hideControlsRunnable)
+
+        val current = qualityVariants.getOrNull(currentQualityIndex)?.label ?: qualityVariants.first().label
+        val autoLabel = getString(R.string.player_quality_auto_label, current)
+        val labels = (listOf(autoLabel) + qualityVariants.map { it.label }).toTypedArray()
+        // Checked row: Auto (0) when Auto is on, else the pinned rung (offset by the Auto entry).
+        val checked = if (autoQualityEnabled) 0 else currentQualityIndex + 1
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.player_quality)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                if (which == 0) {
+                    enableAutoQuality()
+                } else {
+                    selectQualityManually(which - 1)
+                }
+                dialog.dismiss()
+            }
+            .setOnDismissListener { scheduleHideControls() }
+            .show()
+    }
+
+    /** Item C — user pinned a specific rung: leave Auto and swap to it (seamless, position-preserving). */
+    private fun selectQualityManually(index: Int) {
+        autoQualityEnabled = false
+        val label = qualityVariants.getOrNull(index)?.label ?: return
+        if (index == currentQualityIndex) {
+            showIndicator(getString(R.string.player_osd_quality_selected, label))
+            scheduleHideControls()
+            return
+        }
+        switchQuality(index, getString(R.string.player_osd_quality_selected, label))
+    }
+
+    /** Item D — user chose Auto: re-enable the observer and re-baseline its timers from now. */
+    private fun enableAutoQuality() {
+        autoQualityEnabled = true
+        recentBufferingStalls = 0
+        smoothPlaybackSince = SystemClock.elapsedRealtime()
+        lastAutoUpgradeAt = SystemClock.elapsedRealtime()
+        showIndicator(getString(R.string.player_osd_quality_selected, getString(R.string.player_quality_auto)))
+        scheduleHideControls()
+    }
+
+    /**
+     * Items B/C/D — the shared swap primitive. Saves the current position, points at the new
+     * variant's URL (re-appending [qualityHeaderSuffix]), and replays via [play] so the engine
+     * re-opens at that offset. A live stream carries no rewindable timeline, so it restarts at the
+     * live edge (startMs = 0).
+     */
+    private fun switchQuality(targetIndex: Int, announce: String?) {
+        val variant = qualityVariants.getOrNull(targetIndex) ?: return
+        val resumeMs = if (isLiveStream()) 0L else (engine?.positionMs ?: 0L)
+        currentQualityIndex = targetIndex
+        qualitySwapInFlight = true
+        announce?.let { showIndicator(it) }
+        play(variant.url + qualityHeaderSuffix, startMs = resumeMs)
+        scheduleHideControls()
+    }
+
+    /**
+     * Item B — sequential fallback. A fatal error on the active variant drops one rung DOWN the
+     * ladder (720p → 480p) and retries at the same position, until the lowest rung is reached — at
+     * which point the error is real and surfaced. Returns true if a fallback was started.
+     */
+    private fun tryQualityFallback(): Boolean {
+        if (!hasQualityOptions) return false
+        val next = currentQualityIndex + 1
+        val lower = qualityVariants.getOrNull(next) ?: return false  // already at the lowest rung
+        val from = qualityVariants[currentQualityIndex].label
+        switchQuality(next, getString(R.string.player_quality_fallback, from, lower.label))
+        return true
+    }
+
+    /**
+     * Item D — arm the handshake stopwatch and reset the first-frame gate for a variant load. The
+     * matching disarm is in the engine's onReady; if the budget elapses first, [onSlowHandshake]
+     * downgrades before playback ever starts.
+     */
+    private fun armQualityLoadTimers() {
+        handler.removeCallbacks(handshakeTimeoutRunnable)
+        if (!hasQualityOptions || !autoQualityEnabled) {
+            awaitingFirstFrame = false
+            return
+        }
+        qualityLoadStartedAt = SystemClock.elapsedRealtime()
+        awaitingFirstFrame = true
+        handler.postDelayed(handshakeTimeoutRunnable, QUALITY_HANDSHAKE_BUDGET_MS)
+    }
+
+    /**
+     * Item D — the current variant's network handshake blew past [QUALITY_HANDSHAKE_BUDGET_MS]
+     * before rendering a frame: step down one rung immediately so playback can start on a lighter
+     * stream. Guarded by the caller ([handshakeTimeoutRunnable]) to Auto + multi-variant.
+     */
+    private fun onSlowHandshake() {
+        val next = currentQualityIndex + 1
+        val lower = qualityVariants.getOrNull(next) ?: return
+        awaitingFirstFrame = false
+        switchQuality(next, getString(R.string.player_quality_auto_downgrade, lower.label))
+    }
+
+    /**
+     * Item D — a repeated-stall or slow-handshake signal after playback started: jump straight to
+     * the LOWEST rung (weak network — stop laddering down one at a time).
+     */
+    private fun downgradeToLowestQuality() {
+        val lowest = qualityVariants.lastIndex
+        if (lowest <= currentQualityIndex) return  // already at the bottom
+        val label = qualityVariants[lowest].label
+        recentBufferingStalls = 0
+        switchQuality(lowest, getString(R.string.player_quality_auto_downgrade, label))
+    }
+
+    /**
+     * Item D — high-bandwidth recovery. Called from the progress ticker: after a sustained smooth
+     * (stall-free) window at a reduced quality, step UP one rung, rate-limited so a marginal link
+     * can't oscillate up/down. Does nothing at the top rung, when Auto is off, or while a swap or
+     * the first-frame handshake is still in flight.
+     */
+    private fun maybeUpgradeQuality() {
+        if (!autoQualityEnabled || !hasQualityOptions || qualitySwapInFlight || awaitingFirstFrame) return
+        if (currentQualityIndex == 0) return                 // already highest
+        if (engine?.isPlaying != true) return
+        val now = SystemClock.elapsedRealtime()
+        if (smoothPlaybackSince == 0L) { smoothPlaybackSince = now; return }
+        if (now - smoothPlaybackSince < QUALITY_UPGRADE_STABLE_MS) return
+        if (now - lastAutoUpgradeAt < QUALITY_UPGRADE_COOLDOWN_MS) return
+        val higher = currentQualityIndex - 1
+        val label = qualityVariants[higher].label
+        lastAutoUpgradeAt = now
+        smoothPlaybackSince = now
+        switchQuality(higher, getString(R.string.player_quality_auto_upgrade, label))
     }
 
     // --- promt4: persistent resume state ------------------------------------------------------
@@ -679,10 +936,31 @@ class PlayerActivity : AppCompatActivity() {
      */
     private val engineListener = object : PlaybackEngine.Listener {
 
-        override fun onBuffering() = showLoading()
+        override fun onBuffering() {
+            showLoading()
+            // promt2 Item D — count buffering stalls that happen AFTER the first frame (a mid-play
+            // stall, not the initial connect). Repeated stalls in a short window = weak network =>
+            // downgrade to the lowest rung. A clean window resets the counter.
+            if (autoQualityEnabled && hasQualityOptions && !awaitingFirstFrame && !qualitySwapInFlight) {
+                recentBufferingStalls++
+                smoothPlaybackSince = 0L  // playback is no longer smooth; upgrade window restarts
+                handler.removeCallbacks(clearBufferingStallsRunnable)
+                handler.postDelayed(clearBufferingStallsRunnable, QUALITY_STALL_WINDOW_MS)
+                if (recentBufferingStalls >= QUALITY_STALL_DOWNGRADE_COUNT) {
+                    handler.removeCallbacks(clearBufferingStallsRunnable)
+                    downgradeToLowestQuality()
+                }
+            }
+        }
 
         override fun onReady() {
             showVideo()
+            // promt2 Item D — first frame rendered: disarm the handshake stopwatch and open the
+            // smooth-playback upgrade window. A completed quality/fallback swap is now settled.
+            handler.removeCallbacks(handshakeTimeoutRunnable)
+            awaitingFirstFrame = false
+            qualitySwapInFlight = false
+            if (smoothPlaybackSince == 0L) smoothPlaybackSince = SystemClock.elapsedRealtime()
             // Re-apply user preferences the fresh load reset.
             applyVolume()
             engine?.speed = if (turboActive) TURBO_RATE else playbackSpeed
@@ -735,7 +1013,13 @@ class PlayerActivity : AppCompatActivity() {
             else showVideo()
         }
 
-        override fun onError() = showError(getString(R.string.player_error_network))
+        override fun onError() {
+            // promt2 Item B — sequential fallback: before surfacing the error, try stepping DOWN the
+            // quality ladder (a dead 1080p mirror may still have a live 720p/480p). Only when the
+            // lowest rung also fails is the error real and shown. Inert for single-link streams.
+            if (tryQualityFallback()) return
+            showError(getString(R.string.player_error_network))
+        }
 
         override fun onEnded() {
             // promt4 §1 — a fully played video is marked completed so it won't prompt to resume.
@@ -754,6 +1038,8 @@ class PlayerActivity : AppCompatActivity() {
 
         // Step 11.
         btnSpeed.setOnClickListener { showSpeedDialog() }
+        // promt2 Item C — Virtual Quality Manager picker (button itself stays GONE for single-link).
+        btnQuality.setOnClickListener { showQualityDialog() }
         btnAudioTrack.setOnClickListener { showTrackDialog(audio = true) }
         btnSubtitles.setOnClickListener { showTrackDialog(audio = false) }
         btnPip.setOnClickListener { enterPipMode() }
@@ -963,6 +1249,8 @@ class PlayerActivity : AppCompatActivity() {
         binding.seekBar.progress = 0
         binding.textElapsed.text = formatTime(0L)
         binding.textDuration.text = formatTime(0L)
+        // promt2 — regenerate the quality ladder for the newly selected item before it loads.
+        prepareQualityVariants()
         play(item.url)
         scheduleHideControls()
     }
@@ -988,6 +1276,10 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun updateProgress() {
         val player = engine ?: return
+        // promt2 Item D — high-bandwidth recovery probe on the 500ms tick (checked before the live
+        // early-return so it also applies to live multi-quality streams). No-op unless Auto is on,
+        // the stream has a real ladder, and we're below the top rung.
+        maybeUpgradeQuality()
         val length = player.durationMs
         if (length <= 0) return // live stream with no known duration
         binding.textDuration.text = formatTime(length)
@@ -2161,6 +2453,18 @@ class PlayerActivity : AppCompatActivity() {
 
         /** [BUG FIX] Live TV Playback Safety — minimum gap between two auto surface-recovery reconnects. */
         private const val LIVE_RECOVERY_COOLDOWN_MS = 8_000L
+
+        // --- promt2 Item D: Auto-mode tuning ---
+        /** Handshake budget: if the first frame doesn't render within this, downgrade one rung (Item D). */
+        private const val QUALITY_HANDSHAKE_BUDGET_MS = 4_000L
+        /** Mid-play buffering stalls counted within this rolling window trigger a downgrade. */
+        private const val QUALITY_STALL_WINDOW_MS = 12_000L
+        /** Number of stalls within [QUALITY_STALL_WINDOW_MS] that forces a drop to the lowest rung. */
+        private const val QUALITY_STALL_DOWNGRADE_COUNT = 3
+        /** Uninterrupted smooth playback required before Auto attempts a one-rung upgrade. */
+        private const val QUALITY_UPGRADE_STABLE_MS = 25_000L
+        /** Minimum gap between two successive Auto upgrades, so a marginal link can't oscillate. */
+        private const val QUALITY_UPGRADE_COOLDOWN_MS = 30_000L
 
         /** [FEATURE UPDATE] Movement/time bounds for a raw touch-up to still count as a tap. */
         private const val TAP_SLOP_PX = 24f

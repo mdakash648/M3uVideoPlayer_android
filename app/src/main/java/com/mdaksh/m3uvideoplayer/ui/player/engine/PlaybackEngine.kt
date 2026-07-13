@@ -39,6 +39,16 @@ interface PlaybackEngine {
         fun onError()
         /** The video render surface was lost while a live stream should be playing (recovery hook). */
         fun onVideoSurfaceLost()
+
+        /**
+         * The stream carries an audio track that the active engine has NO decoder for (e.g. Dolby
+         * Digital Plus / Atmos / AC3 / DTS on Android TV, where ExoPlayer lacks a software decoder and
+         * the hardware has none). ExoPlayer signals this by silently dropping the audio track — video
+         * plays but there is no sound and no error — so it is reported here as a distinct proactive
+         * signal that [EngineController] uses to switch the stream to the FFmpeg-backed VLC engine.
+         * Default no-op: only the controller reacts; the outer UI listener never needs it.
+         */
+        fun onUnsupportedAudio() {}
     }
 
     /** Attach the engine's output to its render surface and start receiving [Listener] callbacks. */

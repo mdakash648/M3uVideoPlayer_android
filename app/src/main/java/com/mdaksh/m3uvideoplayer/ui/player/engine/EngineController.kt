@@ -82,6 +82,16 @@ class EngineController(
                 outerListener?.onError()
             }
         }
+        override fun onUnsupportedAudio() {
+            // Silent-audio case: ExoPlayer renders the video but has no decoder for this stream's
+            // Dolby/AC3/DTS audio. Unlike onError this can arrive AFTER ready (video is fine), so it
+            // is NOT gated on becameReady — switch the stream to the VLC engine, which bundles the
+            // codecs. Guarded by fellBackForCurrent so it happens once per load.
+            if (!fellBackForCurrent && lastUrl != null) {
+                fellBackForCurrent = true
+                fallbackToVlc()
+            }
+        }
     }
 
     /** Listener wrapper on the VLC engine — a VLC error is terminal (no further fallback). */

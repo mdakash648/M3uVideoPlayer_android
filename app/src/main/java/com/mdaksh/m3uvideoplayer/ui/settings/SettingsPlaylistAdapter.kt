@@ -10,7 +10,8 @@ import com.mdaksh.m3uvideoplayer.domain.model.Playlist
 
 /** Read-only-looking list row for Settings ➔ Playlists; tapping a row opens the Edit screen. */
 class SettingsPlaylistAdapter(
-    private val onOpen: (Playlist) -> Unit
+    private val onOpen: (Playlist) -> Unit,
+    private val formatLastUpdated: (Long) -> String
 ) : ListAdapter<Playlist, SettingsPlaylistAdapter.SettingsPlaylistViewHolder>(DIFF_CALLBACK) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SettingsPlaylistViewHolder {
@@ -30,6 +31,7 @@ class SettingsPlaylistAdapter(
         fun bind(playlist: Playlist) {
             binding.textPlaylistName.text = playlist.name
             binding.textPlaylistUrl.text = playlist.url
+            binding.textLastUpdated.text = formatLastUpdated(playlist.lastUpdated)
             binding.root.setOnClickListener { onOpen(playlist) }
         }
     }

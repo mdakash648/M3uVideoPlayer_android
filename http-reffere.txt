@@ -1,0 +1,53 @@
+আপনার M3U Video Player অ্যাপে এই সমস্যাটি সমাধান করার জন্য আপনাকে মূলত ExoPlayer (বা Media3) এর DataSource Factory ব্যবহার করতে হবে। নিচে বিস্তারিত স্টেপ এবং কোড লজিক দেওয়া হলো যা আপনি আপনার অ্যাপে যুক্ত করতে পারেন:
+কেন ৪০৩ (403 Forbidden) এরর হয়?
+অনেক IPTV সার্ভার নিরাপত্তা নিশ্চিত করার জন্য চেক করে যে রিকোয়েস্টটি কোনো নির্দিষ্ট অ্যাপ বা ওয়েবসাইট (Referer) থেকে আসছে কি না। আপনি যদি শুধু লিঙ্ক প্লে করেন কিন্তু Referer বা User-Agent না পাঠান, তখন সার্ভার আপনাকে ব্লক করে দেয়।
+সমাধান করার পদ্ধতি (Step-by-Step):
+১. লিঙ্কের সাথে হেডার পার্স করা (Parsing Headers)
+সাধারণত IPTV লিঙ্কে হেডারগুলো পাইপ | বা কুয়েরি আকারে থাকে। যেমন: http://stream.com/live.m3u8|Referer=http://mysite.com&User-Agent=MyPlayer আপনাকে প্রথমে লিঙ্ক থেকে হেডারগুলো আলাদা করতে হবে।
+২. ExoPlayer-এ হেডার সেট করা (Java Example)
+আপনার অ্যাপে যেখানে প্লেয়ার সেটআপ করছেন, সেখানে নিচের লজিকটি ব্যবহার করুন:
+Java
+// ১. প্রথমে একটি Map তৈরি করুন যেখানে হেডারগুলো থাকবে
+Map<String, String> headers = new HashMap<>();
+headers.put("Referer", "আপনার_লিঙ্কের_রেফারার_এখানে"); 
+headers.put("User-Agent", "আপনার_কাস্টম_ইউজার_এজেন্ট");
+
+// ২. DefaultHttpDataSource.Factory তৈরি করুন
+HttpDataSource.Factory httpDataSourceFactory = new DefaultHttpDataSource.Factory()
+        .setAllowCrossProtocolRedirects(true)
+        .setDefaultRequestProperties(headers); // এখানে হেডারগুলো সেট হচ্ছে
+
+// ৩. DataSource.Factory তৈরি করুন (এটি ক্যাশিং বা অন্য প্রয়োজনে লাগে)
+DataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(context, httpDataSourceFactory);
+
+// ৪. MediaSourceFactory তৈরি করে প্লেয়ারে সেট করুন
+MediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(dataSourceFactory);
+
+ExoPlayer player = new ExoPlayer.Builder(context)
+        .setMediaSourceFactory(mediaSourceFactory)
+        .build();
+
+// ৫. ভিডিও প্লে করার সময় MediaItem তৈরি করুন
+MediaItem mediaItem = MediaItem.fromUri(videoUri);
+player.setMediaItem(mediaItem);
+player.prepare();
+player.play();
+আপনি যদি এটি সহজভাবে করতে চান (Full Details for AI Prompting):
+আপনি যদি কোনো ডেভেলপারকে বা অন্য কোনো AI টুলকে দিয়ে এটি করাতে চান, তবে নিচের Prompt টি ব্যবহার করতে পারেন:
+AI Prompt: "I am building an Android IPTV player using ExoPlayer (Media3). My app is getting a 403 Forbidden error when playing some M3U links because they require custom HTTP headers like Referer and User-Agent.
+Please provide me the code to:
+1.
+Create a DefaultHttpDataSource.Factory that accepts a Map<String, String> of headers.
+2.
+Pass this factory to DefaultMediaSourceFactory.
+3.
+Show how to extract headers from a link format like url|Referer=...&User-Agent=... and apply them to the player dynamically before playing each video.
+4.
+Ensure it supports HLS and DASH streams."
+কিছু বিশেষ টিপস:
+•
+User-Agent: সবসময় লেটেস্ট ক্রোম ব্রাউজারের ইউজার এজেন্ট ব্যবহার করার চেষ্টা করবেন।
+•
+Dynamic Headers: প্রতিটি লিঙ্কের জন্য আলাদা আলাদা হেডার হতে পারে, তাই প্লে করার ঠিক আগে লিঙ্কটি চেক করে ম্যাপটি আপডেট করবেন (যা আমরা উপরে MainActivity.java এ অ্যাপটির লজিক দেখে বুঝেছি)।
+•
+Cookies: কিছু সার্ভার কুকিও চেক করে, প্রয়োজন হলে হেডারের মধ্যে Cookie কী (Key) দিয়ে ভ্যালু সেট করে দিবেন।

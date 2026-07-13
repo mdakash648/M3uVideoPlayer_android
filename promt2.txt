@@ -1,28 +1,27 @@
-[PERFORMANCE TUNING] Eliminate Chunk Transition Lag & Micro-Stutters in Live TV Playback
+[DYNAMIC RESOLUTION ARCHITECTURE] Multi-Link Fallback & Custom Quality Selector for Fragmented VOD/IPTV StreamsCONTEXT & DIAGNOSIS├── SITUATION : The M3U playlist contains two types of video sources. Source 1 has a single quality link, while Source 2 hosts multiple qualities across entirely separate URLs (e.g., separate files for 480p, 720p, 1080p with resolution tags in the string).├── PROBLEM : LibVLC's native HLS/Dash adaptive engine (:demux=adaptive) cannot automatically bridge or switch between entirely distinct physical HTTP URLs/files; it only handles adaptive streaming if they are bound inside a single master .m3u8 or Dynamic ACL.└── GOAL : Build a custom Virtual Quality Manager layer in Kotlin (MVVM Architecture) that parses URL metadata using Regex to detect multiple variants, handles sequential fallback connection attempts, injects a UI Quality Selector Dropdown, and simulates an "Auto Mode" by monitoring network loading times or LibVLC player buffering states to swap source URLs dynamically.MULTI-LINK DETECTION & FALLBACK LOGIC (ক্লোডের জন্য স্পেসিফিক নির্দেশ)■ ITEM A: REGEX METADATA PARSING & VARIANT GENERATION├── ACTION : Write a utility function inside your Repository layer to analyze the stream URL. If it contains tags like 1080p, 720p, or 480p, dynamically generate the alternative URLs by replacing the resolution substring.└── IMPLEMENTATION LOGIC :```kotlinobject QualityUrlParser {private val resolutionRegex = Regex("(1080p|720p|480p)", RegexOption.IGNORE_CASE)      fun generateQualityMap(originalUrl: String): Map<String, String> {
+          val match = resolutionRegex.find(originalUrl) ?: return mapOf("Original" to originalUrl)
+          val currentQuality = match.value
 
-1. TARGET SYSTEM
-   └── ENGINE : LibVLC Media Player Configuration for Live Streams (`isLive == 1`).
+          return mapOf(
+              "1080p" to originalUrl.replace(currentQuality, "1080p", ignoreCase = true),
+              "720p" to originalUrl.replace(currentQuality, "720p", ignoreCase = true),
+              "480p" to originalUrl.replace(currentQuality, "480p", ignoreCase = true)
+          )
+      }
+  }
+  ```
+■ ITEM B: SEQUENTIAL FALLBACK CONNECTION PIPELINE├── ACTION : When a channel/movie opens, attempt to connect to the default URL found in the M3U. If LibVLC throws a playback error (e.g., Encountered an error while playing this media or network timeout), intercept the failure inside the Player Event Manager and automatically switch to the next available resolution link (720p -> 480p).└── EVENT HANDLING :* Monitor MediaPlayer.Event.EncounteredError.* Maintain a currentFallbackIndex pointer. If an error occurs during initialization, release the current media, load the next generated fallback URL from the map, and re-call mediaPlayer.play().■ ITEM C: UI DROP-DOWN & REAL-TIME QUALITY SWITCHING├── ACTION : Expose the generated Map<String, String> to your PlayerViewModel. If the map contains more than 1 item, trigger an observer to display a "Change Quality" Dropdown on the Player UI Overlay.└── TRACK MANAGEMENT : When a user manually selects a quality (e.g., 720p) from the dropdown:1. Save the current playback position timestamp ($T_{current} = \text{mediaPlayer.time}$).2. Stop the player and create a new IMedia instance using the selected quality's specific URL.3. Inject the caching options, call mediaPlayer.play(), and immediately seek back to $T_{current}$ to ensure a seamless transition.■ ITEM D: NETWORK-AWARE "AUTO MODE" EMULATION├── ACTION : Since the URLs are separate files, LibVLC cannot shift bitrates on its own. You must implement a custom network-performance observer to emulate "Auto Mode".└── MONITORING STRATEGY :* Buffer Stalled State: Listen to MediaPlayer.Event.Buffering. If the player remains in a buffering state or enters Buffering repeatedly within a short window (indicating weak network), trigger an automatic downgrade to the lowest available quality (480p).* Speed / Loading Time Tracker: Measure the initial response time of the network stream handshake. If the connection handshake takes longer than 4000ms, fallback immediately to a lower resolution URL before playback starts.* High-Bandwidth Recovery: If the buffer fills instantly and stays at 100% smoothly for a prolonged duration, upgrade the system to the highest running quality available in the map.IMPLEMENTATION PATH└── Please refactor the Player Controller structure inside PlayerActivity.kt and its associated UI layer. Integrate the QualityUrlParser utility right after fetching the channel stream URL from the Room database. Pass the generated quality variants array to the UI dropdown adapter and configure the LibVLC event listener pipeline to catch errors and handle the automated fallback loop efficiently.
 
-2. THE PROBLEM (Chunk-Gap Lag)
-   ├── BEHAVIOR : Live TV channels play fine for a while, but freeze/stutter for ~1 second at every chunk/segment boundary before resuming. 
-   └── CAUSE : The current network-caching or live-caching buffer window is too tight, or the hardware/software demuxer is waiting too long to parse the next TS/HLS segment, causing a brief buffer underflow during chunk transitions.
 
-3. OPTIMIZATION REQUIREMENTS (Advanced LibVLC Options)
 
-   ■ ITEM A: EXPAND NETWORK & LIVE CACHING WINDOW
-     ├── ACTION : In `PlaybackBuffering.kt` (or your player arguments configuration), enforce larger, safer buffer thresholds specifically for Live Streams to absorb transition latency.
-     └── PARAMETERS :
-         ├── `--network-caching=8000` (Increase from 5000ms to 8000ms to keep 8 seconds of stream ahead).
-         ├── `--live-caching=6000`    (Increase live buffer to 6 seconds to handle erratic IPTV server responses).
-         └── `--file-caching=4000`    (Ensure local file caching is stable if any temporary local cache is used).
+last session context : 
+● API Error: 402 {"error":"Usage limit reached, will reset on today at 2:11 AM (UTC+8)"}
 
-   ■ ITEM B: TUNING THE HLS/DEMUX ENGINE FOR SEAMLESS TRANSITIONS
-     ├── ACTION : Add explicit LibVLC command-line/media configuration arguments to force seamless segment stitching and faster demuxing.
-     └── ARGUMENTS TO IMPLEMENT :
-         ├── `--clock-synchro=1` or `--clock-jitter=5000` (Compensates for unstable server clocks between chunk handshakes).
-         ├── `--hls-adaptive-bitrate` (Ensure adaptive bitrate is configured to fluidly downscale quality instead of freezing the frame if a chunk is late).
-         ├── `:demux=ts` or `:demux=hls` (Explicitly force the demuxer framework to avoid auto-detect overhead at segment changes).
-         └── `--adaptive-logic=highest` or `--adaptive-logic=near-optimal` (Tells VLC to intelligently pre-buffer segments based on current download speed).
+✻ Sautéed for 1s
 
-   ■ ITEM C: REFACTOR PLAYER INVOCATION
-     └── Please check where `mediaPlayer.setMedia()` or `IMedia.addOption()` is called for live streams. Inject these high-performance caching and adaptive options into the live stream initialization path so they apply directly before the playback pipeline begins.
+  5 tasks (1 done, 1 in progress, 3 open)
+  √ Create QualityUrlParser util (Item A)
+  ■ Add QualityUrlParserTest
+  □ Add quality button + icon + strings to player UI
+  □ Wire quality manager into PlayerActivity (Items B+C)
+  □ Compile, run tests, verify

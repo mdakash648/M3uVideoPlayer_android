@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.mdaksh.m3uvideoplayer.domain.model.TimeZoneMode
 import com.mdaksh.m3uvideoplayer.ui.channel.ChannelSortOrder
 import com.mdaksh.m3uvideoplayer.ui.channel.ChannelViewMode
 import com.mdaksh.m3uvideoplayer.ui.group.FolderSortOrder
@@ -132,6 +133,34 @@ class UserPreferencesRepository @Inject constructor(
         dataStore.edit { prefs -> prefs[KEY_SWIPE_SENSITIVITY_PERCENT] = clamped }
     }
 
+    /**
+     * The user's time-zone display preference — [TimeZoneMode] plus, when [TimeZoneMode.MANUAL],
+     * the explicitly chosen IANA zone id (e.g. "Asia/Dhaka"). In AUTO mode [TimeZonePreference.zoneId]
+     * is null and callers should fall back to the device zone for display. Stored name-based, same
+     * as the other prefs, so reordering/removing enum entries can't silently repoint an old value.
+     */
+    val timeZonePreferenceFlow: Flow<TimeZonePreference> = dataStore.data.map { prefs ->
+        val mode = TimeZoneMode.fromName(prefs[KEY_TIME_ZONE_MODE])
+        val zoneId = prefs[KEY_TIME_ZONE_ID]?.takeIf { it.isNotBlank() }
+        TimeZonePreference(mode, zoneId)
+    }
+
+    /** Switch to Auto — display follows the device zone; the saved manual zone id is cleared. */
+    suspend fun setTimeZoneAuto() {
+        dataStore.edit { prefs ->
+            prefs[KEY_TIME_ZONE_MODE] = TimeZoneMode.AUTO.name
+            prefs.remove(KEY_TIME_ZONE_ID)
+        }
+    }
+
+    /** Switch to Manual and pin display to [zoneId] (an IANA id like "Asia/Dhaka"). */
+    suspend fun setTimeZoneManual(zoneId: String) {
+        dataStore.edit { prefs ->
+            prefs[KEY_TIME_ZONE_MODE] = TimeZoneMode.MANUAL.name
+            prefs[KEY_TIME_ZONE_ID] = zoneId
+        }
+    }
+
     companion object {
         private val KEY_VIEW_MODE = stringPreferencesKey("channel_view_mode")
         private val KEY_FOLDER_VIEW_MODE = stringPreferencesKey("folder_view_mode")
@@ -141,6 +170,8 @@ class UserPreferencesRepository @Inject constructor(
         private val KEY_POSTER_COLUMN_COUNT = intPreferencesKey("poster_column_count")
         private val KEY_CONTROLS_TIMEOUT_MS = intPreferencesKey("controls_timeout_ms")
         private val KEY_SWIPE_SENSITIVITY_PERCENT = intPreferencesKey("swipe_sensitivity_percent")
+        private val KEY_TIME_ZONE_MODE = stringPreferencesKey("time_zone_mode")
+        private val KEY_TIME_ZONE_ID = stringPreferencesKey("time_zone_id")
 
         /** Sentinel: use the built-in responsive column count instead of a fixed user value. */
         const val COLUMN_COUNT_AUTO = 0
@@ -160,6 +191,15 @@ class UserPreferencesRepository @Inject constructor(
         const val SWIPE_SENSITIVITY_STEP = 25
     }
 }
+
+/**
+ * The persisted time-zone display choice. In [TimeZoneMode.AUTO], [zoneId] is null and display
+ * should follow the device's current zone; in [TimeZoneMode.MANUAL], [zoneId] is the pinned IANA id.
+ */
+data class TimeZonePreference(
+    val mode: TimeZoneMode,
+    val zoneId: String?
+)
 
 /**
  * Single process-wide DataStore instance. The delegate must be a top-level property (the

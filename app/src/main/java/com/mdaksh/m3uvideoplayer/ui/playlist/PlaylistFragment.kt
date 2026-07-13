@@ -19,6 +19,9 @@ import androidx.media3.common.util.UnstableApi
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
+import com.mdaksh.m3uvideoplayer.data.time.TimeZoneManager
+import javax.inject.Inject
+
 @UnstableApi
 @AndroidEntryPoint
 class PlaylistFragment : Fragment() {
@@ -28,6 +31,11 @@ class PlaylistFragment : Fragment() {
 
     private val viewModel: PlaylistViewModel by viewModels()
     private lateinit var adapter: PlaylistAdapter
+    
+    @Inject
+    lateinit var timeZoneManager: TimeZoneManager
+    
+    private var currentZone: java.time.ZoneId = java.time.ZoneId.systemDefault()
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -53,6 +61,13 @@ class PlaylistFragment : Fragment() {
                     startActivity(
                         PlayerActivity.newIntent(requireContext(), queue, startIndex, resumePos)
                     )
+                }
+            },
+            formatLastUpdated = { epochMs ->
+                if (epochMs > 0) {
+                    getString(R.string.last_updated_at, timeZoneManager.formatDateTime(epochMs, currentZone))
+                } else {
+                    getString(R.string.last_updated_never)
                 }
             }
         )
@@ -102,6 +117,14 @@ class PlaylistFragment : Fragment() {
                 }
                 launch {
                     viewModel.resumeTargets.collect { targets -> adapter.setResumeTargets(targets) }
+                }
+                launch {
+                    timeZoneManager.resolvedTimeZone.collect { resolved ->
+                        if (currentZone != resolved.zone) {
+                            currentZone = resolved.zone
+                            adapter.notifyDataSetChanged()
+                        }
+                    }
                 }
             }
         }

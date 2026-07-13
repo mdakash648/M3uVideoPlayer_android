@@ -11,6 +11,7 @@ import com.mdaksh.m3uvideoplayer.data.local.entity.PlaylistEntity
 import com.mdaksh.m3uvideoplayer.domain.model.Channel
 import com.mdaksh.m3uvideoplayer.domain.model.ContentType
 import com.mdaksh.m3uvideoplayer.domain.model.GroupType
+import com.mdaksh.m3uvideoplayer.data.time.TrustedTimeSource
 import com.mdaksh.m3uvideoplayer.domain.model.UpdateFrequency
 import com.mdaksh.m3uvideoplayer.domain.parser.M3UParser
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -22,7 +23,8 @@ class OpenExternalM3UUseCase @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val channelDao: ChannelDao,
     private val groupDao: GroupDao,
-    private val m3uParser: M3UParser
+    private val m3uParser: M3UParser,
+    private val trustedTimeSource: TrustedTimeSource
 ) {
     suspend operator fun invoke(uri: Uri): List<Channel> {
         val historyPlaylistName = "Direct Links History"
@@ -34,7 +36,7 @@ class OpenExternalM3UUseCase @Inject constructor(
                 name = historyPlaylistName,
                 url = DirectLinksHistory.URL_MARKER,
                 type = PlaylistType.M3U,
-                lastUpdated = System.currentTimeMillis(),
+                lastUpdated = trustedTimeSource.now().epochMs,
                 updateFrequency = UpdateFrequency.NEVER.name
             )
             playlistDao.insertPlaylist(newPlaylist)

@@ -241,6 +241,15 @@
                 android:contentDescription="@string/player_speed"
                 android:src="@drawable/ic_speed" />
 
+            <!-- promt2 — Virtual Quality Manager selector. Hidden unless the stream URL resolves to
+                 more than one quality variant (separate physical resolution URLs). -->
+            <ImageButton
+                android:id="@+id/btnQuality"
+                style="@style/Player.ControlButton"
+                android:contentDescription="@string/player_quality"
+                android:src="@drawable/ic_quality"
+                android:visibility="gone" />
+
             <ImageButton
                 android:id="@+id/btnPip"
                 style="@style/Player.ControlButton"

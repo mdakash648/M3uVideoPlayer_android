@@ -13,7 +13,8 @@ import com.mdaksh.m3uvideoplayer.domain.model.PlaylistResumeTarget
 class PlaylistAdapter(
     private val onOpen: (Playlist) -> Unit,
     /** Floating Resume Button engine — tap relaunches [PlaylistResumeTarget.channel]. */
-    private val onResume: (PlaylistResumeTarget) -> Unit
+    private val onResume: (PlaylistResumeTarget) -> Unit,
+    private val formatLastUpdated: (Long) -> String
 ) : ListAdapter<Playlist, PlaylistAdapter.PlaylistViewHolder>(DIFF_CALLBACK) {
 
     /** playlistId -> active resume target; updated live from PlaylistViewModel. */
@@ -55,6 +56,7 @@ class PlaylistAdapter(
             binding.textPlaylistName.text = playlist.name
             // Show the source URL under the name so users can instantly recognise where it came from.
             binding.textPlaylistType.text = playlist.url
+            binding.textLastUpdated.text = formatLastUpdated(playlist.lastUpdated)
 
             binding.root.setOnClickListener { onOpen(playlist) }
             bindResume(playlist)

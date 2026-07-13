@@ -46,6 +46,9 @@ class ExoPlaybackEngine(
     /** Latest known tracks, used to build the audio/subtitle selection lists. */
     private var lastTracks: Tracks = Tracks.EMPTY
 
+    /** Guards [PlaybackEngine.Listener.onUnsupportedAudio] so it fires at most once per [load]. */
+    private var reportedUnsupportedAudio = false
+
     override fun bind(views: EngineViews, listener: PlaybackEngine.Listener) {
         this.listener = listener
         this.playerView = views.playerView
@@ -62,6 +65,7 @@ class ExoPlaybackEngine(
         forceSoftwareDecode: Boolean
     ) {
         release()
+        reportedUnsupportedAudio = false
 
         val exo = ExoPlayer.Builder(context)
             .setLoadControl(loadControl)
@@ -118,6 +122,7 @@ class ExoPlaybackEngine(
 
         override fun onTracksChanged(tracks: Tracks) {
             lastTracks = tracks
+            maybeReportUnsupportedAudio(tracks)
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -168,6 +173,32 @@ class ExoPlaybackEngine(
         return result
     }
 
+    /**
+     * Proactive silent-audio detection. ExoPlayer marks each track with whether the current renderers
+     * can actually decode it. When the stream HAS audio but EVERY audio track is unsupported (no
+     * software AC3/E-AC3/Atmos/DTS decoder and no matching hardware decoder — the Android TV / Fire
+     * Stick case), ExoPlayer plays the video and silently drops the sound with no error. We surface
+     * that once, so [EngineController] can hand this stream to the VLC engine, which bundles the
+     * codecs. Streams whose audio IS decodable (AAC/MP2 live TV, phones with hardware Dolby) report a
+     * supported track here and never fall back.
+     */
+    private fun maybeReportUnsupportedAudio(tracks: Tracks) {
+        if (reportedUnsupportedAudio) return
+        var hasAudio = false
+        var hasSupportedAudio = false
+        for (group in tracks.groups) {
+            if (group.type != C.TRACK_TYPE_AUDIO) continue
+            for (i in 0 until group.length) {
+                hasAudio = true
+                if (group.isTrackSupported(i)) hasSupportedAudio = true
+            }
+        }
+        if (hasAudio && !hasSupportedAudio) {
+            reportedUnsupportedAudio = true
+            listener?.onUnsupportedAudio()
+        }
+    }
+
     override fun selectAudioTrack(id: String) = selectTrack(id, C.TRACK_TYPE_AUDIO)
     override fun selectSubtitleTrack(id: String) = selectTrack(id, C.TRACK_TYPE_TEXT)
 
@@ -212,6 +243,7 @@ class ExoPlaybackEngine(
         player?.release()
         player = null
         lastTracks = Tracks.EMPTY
+        reportedUnsupportedAudio = false
     }
 
     companion object {

@@ -11,6 +11,7 @@ import com.mdaksh.m3uvideoplayer.data.remote.XtreamApiFactory
 import com.mdaksh.m3uvideoplayer.data.remote.XtreamCredentials
 import com.mdaksh.m3uvideoplayer.data.remote.XtreamCredentialsParser
 import com.mdaksh.m3uvideoplayer.data.remote.dto.XtreamCategoryDto
+import com.mdaksh.m3uvideoplayer.data.time.TrustedTimeSource
 import com.mdaksh.m3uvideoplayer.domain.model.Channel
 import com.mdaksh.m3uvideoplayer.domain.model.ContentType
 import com.mdaksh.m3uvideoplayer.domain.model.Group
@@ -23,6 +24,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.net.URL
 import javax.inject.Inject
 
@@ -31,7 +34,9 @@ class PlaylistRepositoryImpl @Inject constructor(
     private val channelDao: ChannelDao,
     private val groupDao: GroupDao,
     private val m3uParser: M3UParser,
-    private val xtreamApiFactory: XtreamApiFactory
+    private val xtreamApiFactory: XtreamApiFactory,
+    private val trustedTimeSource: TrustedTimeSource,
+    private val okHttpClient: OkHttpClient
 ) : PlaylistRepository {
 
     override fun getAllPlaylists(): Flow<List<Playlist>> {
@@ -71,7 +76,19 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     private suspend fun syncM3u(playlist: Playlist) {
         try {
-            val inputStream = URL(playlist.url).openStream()
+            // Use OkHttpClient for network URLs so the trusted-time SSL validation applies
+            // (device clock can be wrong). Local file:// URLs bypass OkHttp.
+            val inputStream = if (playlist.url.startsWith("file://")) {
+                URL(playlist.url).openStream()
+            } else {
+                val request = Request.Builder().url(playlist.url).build()
+                val response = okHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    throw java.io.IOException("HTTP ${response.code}: ${response.message}")
+                }
+                response.body?.byteStream()
+                    ?: throw java.io.IOException("Empty response body")
+            }
             val channels = m3uParser.parse(inputStream, playlist.id)
 
             // Step 11.4 — Infer GroupType from the channels it contains (rather than hardcoding LIVE).
@@ -274,7 +291,9 @@ class PlaylistRepositoryImpl @Inject constructor(
     }
 
     private suspend fun markSynced(playlist: Playlist) {
-        val updated = playlist.copy(lastUpdated = System.currentTimeMillis())
+        // Stamp with trusted (clock-independent) time so "last updated" and the worker's due-gate
+        // stay correct even on devices whose system clock is wrong.
+        val updated = playlist.copy(lastUpdated = trustedTimeSource.now().epochMs)
         playlistDao.updatePlaylist(PlaylistEntity.fromDomain(updated))
     }
 

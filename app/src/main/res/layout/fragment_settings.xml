@@ -71,6 +71,68 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- ===================== UPDATE PLAYLISTS ===================== -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardUpdatePlaylists"
+            style="@style/Settings.MenuCard">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="16dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@android:drawable/ic_popup_sync"
+                    app:tint="@color/televizo_accent" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_update_playlists"
+                        android:textColor="@color/televizo_text_primary"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/settings_update_playlists_subtitle"
+                        android:textColor="@color/televizo_text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Shown only while an update is running; the chevron takes its place otherwise. -->
+                <ProgressBar
+                    android:id="@+id/progressUpdatePlaylists"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:indeterminateTint="@color/televizo_accent"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <ImageView
+                    android:id="@+id/iconUpdatePlaylistsChevron"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:alpha="0.5"
+                    android:contentDescription="@null"
+                    android:src="@android:drawable/ic_media_next" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- ===================== BACKUP & RESTORE ===================== -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardMenuBackupRestore"
@@ -212,12 +274,70 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ===================== DISPLAY (custom column counts) ===================== -->
+        <!-- ===================== TIME & SYNC ===================== -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
             android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/settings_section_time_sync"
+            android:textAllCaps="true"
+            android:textColor="@color/televizo_accent"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardTimeZone"
+            style="@style/Settings.MenuCard">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="16dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="16dp"
+                    android:contentDescription="@null"
+                    android:src="@android:drawable/ic_menu_recent_history"
+                    app:tint="@color/televizo_accent" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_time_zone"
+                        android:textColor="@color/televizo_text_primary"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/textTimeZoneValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textColor="@color/televizo_text_secondary"
+                        android:textSize="12sp"
+                        tools:text="Time Zone: Asia/Dhaka (Auto)" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ===================== DISPLAY (custom column counts) ===================== -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="16dp"
             android:layout_marginBottom="8dp"
             android:text="@string/settings_section_display"
             android:textAllCaps="true"

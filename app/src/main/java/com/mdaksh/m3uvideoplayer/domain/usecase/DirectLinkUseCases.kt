@@ -12,6 +12,7 @@ import com.mdaksh.m3uvideoplayer.data.local.entity.PlaylistEntity
 import com.mdaksh.m3uvideoplayer.domain.model.Channel
 import com.mdaksh.m3uvideoplayer.domain.model.ContentType
 import com.mdaksh.m3uvideoplayer.domain.model.GroupType
+import com.mdaksh.m3uvideoplayer.data.time.TrustedTimeSource
 import com.mdaksh.m3uvideoplayer.domain.model.UpdateFrequency
 import com.mdaksh.m3uvideoplayer.domain.parser.M3UParser
 import kotlinx.coroutines.flow.first
@@ -32,7 +33,8 @@ object DirectLinksHistory {
 class PlayDirectLinkUseCase @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val channelDao: ChannelDao,
-    private val groupDao: GroupDao
+    private val groupDao: GroupDao,
+    private val trustedTimeSource: TrustedTimeSource
 ) {
     suspend operator fun invoke(url: String): Channel {
         val historyPlaylistName = DirectLinksHistory.PLAYLIST_NAME
@@ -47,7 +49,7 @@ class PlayDirectLinkUseCase @Inject constructor(
                 name = historyPlaylistName,
                 url = DirectLinksHistory.URL_MARKER, // placeholder
                 type = PlaylistType.M3U,
-                lastUpdated = System.currentTimeMillis(),
+                lastUpdated = trustedTimeSource.now().epochMs,
                 updateFrequency = UpdateFrequency.NEVER.name
             )
             playlistDao.insertPlaylist(newPlaylist)
@@ -131,7 +133,8 @@ class ImportHistoryUseCase @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val channelDao: ChannelDao,
     private val groupDao: GroupDao,
-    private val m3uParser: M3UParser
+    private val m3uParser: M3UParser,
+    private val trustedTimeSource: TrustedTimeSource
 ) {
     suspend operator fun invoke(inputStream: InputStream) {
         val historyPlaylistName = DirectLinksHistory.PLAYLIST_NAME
@@ -141,9 +144,9 @@ class ImportHistoryUseCase @Inject constructor(
         val playlistId = if (historyPlaylist == null) {
             val newPlaylist = PlaylistEntity(
                 name = historyPlaylistName,
-                url = DirectLinksHistory.URL_MARKER, 
+                url = DirectLinksHistory.URL_MARKER,
                 type = PlaylistType.M3U,
-                lastUpdated = System.currentTimeMillis(),
+                lastUpdated = trustedTimeSource.now().epochMs,
                 updateFrequency = UpdateFrequency.NEVER.name
             )
             playlistDao.insertPlaylist(newPlaylist)

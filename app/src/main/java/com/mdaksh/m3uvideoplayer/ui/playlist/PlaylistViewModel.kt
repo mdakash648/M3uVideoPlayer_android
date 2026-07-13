@@ -32,7 +32,8 @@ class PlaylistViewModel @Inject constructor(
     private val deletePlaylistUseCase: DeletePlaylistUseCase,
     private val syncPlaylistUseCase: SyncPlaylistUseCase,
     private val clearPlaylistResumePointUseCase: ClearPlaylistResumePointUseCase,
-    private val updateScheduler: PlaylistUpdateScheduler
+    private val updateScheduler: PlaylistUpdateScheduler,
+    private val trustedTimeSource: com.mdaksh.m3uvideoplayer.data.time.TrustedTimeSource
 ) : ViewModel() {
 
     private val allPlaylists: StateFlow<List<Playlist>> = getPlaylistsUseCase()
@@ -88,6 +89,9 @@ class PlaylistViewModel @Inject constructor(
         viewModelScope.launch {
             _isSyncing.value = true
             try {
+                // Refresh trusted time so the SSL trust manager can validate certs
+                // using correct network time (device clock may be wrong).
+                trustedTimeSource.refresh()
                 syncPlaylistUseCase(playlist)
             } catch (e: Exception) {
                 _syncErrors.emit("${playlist.name}: ${e.message ?: "Sync failed"}")

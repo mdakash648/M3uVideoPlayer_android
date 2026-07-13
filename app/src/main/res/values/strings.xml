@@ -3,7 +3,7 @@
     <string name="hello_akash">Hello Akash</string>
 
     <!-- Android TV (Step 7) -->
-    <string name="tv_loading">Loading…</string>
+    <string name="tv_loading">Loadingâ€¦</string>
     <string name="tv_browse_title">M3U Video Player</string>
     <string name="tv_row_favorites">Favorites</string>
     <string name="tv_uncategorized">Uncategorized</string>
@@ -100,10 +100,13 @@
     <string name="settings_placeholder">Settings options will be added soon.</string>
     <string name="settings_menu_playlists">Playlists</string>
     <string name="settings_menu_playlists_subtitle">View, edit, and remove your saved playlists</string>
+    <string name="settings_update_playlists">Update Playlists</string>
+    <string name="settings_update_playlists_subtitle">Refresh all playlists from their source</string>
+    <string name="settings_update_playlists_progress">Updating playlistsâ€¦</string>
     <string name="settings_menu_backup_restore">Backup &amp; Restore</string>
     <string name="settings_menu_backup_restore_subtitle">Save or restore your app data</string>
 
-    <!-- Settings ▸ Display (custom column counts for the Folder & Folder Content grids) -->
+    <!-- Settings â–¸ Display (custom column counts for the Folder & Folder Content grids) -->
     <string name="settings_section_display">Display</string>
     <string name="settings_grid_columns">Grid View Columns</string>
     <string name="settings_grid_columns_subtitle">Items per row in Grid view (Folders &amp; Channels)</string>
@@ -113,14 +116,14 @@
     <string name="column_count_decrease">Fewer columns</string>
     <string name="column_count_increase">More columns</string>
 
-    <!-- Settings ▸ Playback (controller auto-hide timeout) -->
+    <!-- Settings â–¸ Playback (controller auto-hide timeout) -->
     <string name="settings_section_playback">Playback</string>
     <string name="settings_controls_timeout">Controller Timeout</string>
     <string name="settings_controls_timeout_subtitle">How long the player controller stays on screen before auto-hiding</string>
     <string name="settings_swipe_sensitivity">Swipe Seek Sensitivity</string>
     <string name="settings_swipe_sensitivity_subtitle">Speed of the left/right swipe gesture to skip video position</string>
 
-    <!-- Step 9 — LibVLC player screen -->
+    <!-- Step 9 â€” LibVLC player screen -->
     <string name="player_error_generic">Playback error.</string>
     <string name="player_error_network">Couldn\'t play this channel. Check your network and try again.</string>
     <string name="player_error_no_url">This channel has no stream to play.</string>
@@ -128,7 +131,7 @@
     <string name="player_boost_off">Boost: 100%</string>
     <string name="player_boost_on">Boost: 200%</string>
 
-    <!-- Step 10 — Advanced player UI -->
+    <!-- Step 10 â€” Advanced player UI -->
     <string name="action_back">Back</string>
     <string name="player_play_pause">Play or pause</string>
     <string name="player_fullscreen">Toggle fullscreen</string>
@@ -142,17 +145,17 @@
     <string name="player_gesture_volume">Volume %1$d%%</string>
     <string name="player_gesture_seek_forward">+%1$ds</string>
     <string name="player_gesture_seek_backward">-%1$ds</string>
-    <string name="player_gesture_seek_drag_forward">▶▶ +%1$s</string>
-    <string name="player_gesture_seek_drag_backward">◀◀ -%1$s</string>
+    <string name="player_gesture_seek_drag_forward">â–¶â–¶ +%1$s</string>
+    <string name="player_gesture_seek_drag_backward">â—€â—€ -%1$s</string>
     <string name="player_seek_time_with_duration">%1$s / %2$s</string>
     <string name="player_locked_hint">Swipe Up to Down to Unlock</string>
-    <!-- [BUG FIX] Live TV Playback Safety — RULE B seek-lock toast. -->
+    <!-- [BUG FIX] Live TV Playback Safety â€” RULE B seek-lock toast. -->
     <string name="player_live_seek_disabled">Seeking is unavailable on Live Streams</string>
     <string name="player_audio_notification_channel">Background playback</string>
     <string name="player_audio_playing">Playing audio</string>
     <string name="player_audio_mode_on">Audio-only mode on</string>
 
-    <!-- Step 11 — Multi-tasking & playback (PiP, speed, track OSD, catch-up) -->
+    <!-- Step 11 â€” Multi-tasking & playback (PiP, speed, track OSD, catch-up) -->
     <string name="player_pip">Picture-in-picture</string>
     <string name="player_speed">Playback speed</string>
     <string name="player_speed_current">Speed %1$s</string>
@@ -169,21 +172,30 @@
     <string name="player_seek_10">10s</string>
     <string name="player_seek_30">30s</string>
 
+    <!-- promt2 â€” Virtual Quality Manager (multi-link fallback + manual quality selector + auto mode). -->
+    <string name="player_quality">Quality</string>
+    <string name="player_quality_auto">Auto</string>
+    <string name="player_quality_auto_label">Auto (%1$s)</string>
+    <string name="player_osd_quality_selected">Quality: %1$s</string>
+    <string name="player_quality_fallback">%1$s unavailable â€” switching to %2$s</string>
+    <string name="player_quality_auto_downgrade">Weak network â€” dropped to %1$s</string>
+    <string name="player_quality_auto_upgrade">Network stable â€” raised to %1$s</string>
+
     <!-- [FEATURE UPDATE] Screen rotate + Next/Previous queue controls. -->
     <string name="player_rotate">Rotate screen</string>
     <string name="player_next">Next video</string>
     <string name="player_previous">Previous video</string>
 
-    <!-- promt5 — floating resume button. -->
+    <!-- promt5 â€” floating resume button. -->
     <string name="resume_last_played">Resume last played</string>
 
-    <!-- promt4 — resume-playback prompt. -->
+    <!-- promt4 â€” resume-playback prompt. -->
     <string name="player_resume_title">Resume playback</string>
     <string name="player_resume_message">You left off at %1$s. Continue watching or start over?</string>
     <string name="player_resume_continue">Continue</string>
     <string name="player_resume_start_over">Start over</string>
 
-    <!-- Settings ▸ Playlists screen -->
+    <!-- Settings â–¸ Playlists screen -->
     <string name="title_manage_playlists">Playlists</string>
 
     <!-- Backup & Restore screen -->
@@ -213,7 +225,7 @@
     <string name="playlist_updated">Playlist updated</string>
     <string name="playlist_removed">Playlist removed</string>
 
-    <!-- Direct Links History — folder &amp; video delete -->
+    <!-- Direct Links History â€” folder &amp; video delete -->
     <string name="delete_folder_confirm_title">Delete folder?</string>
     <string name="delete_folder_confirm_message">\"%1$s\" and all its videos will be permanently deleted. This can\'t be undone.</string>
     <string name="delete_video_confirm_title">Delete video?</string>
@@ -229,4 +241,14 @@
     <string name="action_export_history_subtitle">Save your direct links history as an M3U file</string>
     <string name="action_import_history">Import History Playlist</string>
     <string name="action_import_history_subtitle">Load a modified history M3U file</string>
+    <string name="settings_section_time_sync">Time &amp; Sync</string>
+    <string name="settings_time_zone">Time Zone</string>
+    <string name="time_zone_auto">Auto</string>
+    <string name="time_zone_auto_detected">Auto (%1$s)</string>
+    <string name="time_zone_manual">%1$s (Manual)</string>
+    <string name="last_updated_at">Last updated: %1$s</string>
+    <string name="last_updated_never">Last updated: Never</string>
+    <string name="time_zone_dialog_title">Select Time Zone</string>
+    <string name="time_zone_option_auto">Auto (Detect by Location)</string>
+    <string name="time_zone_search_hint">Search time zones…</string>
 </resources>

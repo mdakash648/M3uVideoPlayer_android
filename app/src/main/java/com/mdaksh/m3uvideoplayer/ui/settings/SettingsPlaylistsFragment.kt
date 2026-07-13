@@ -16,6 +16,9 @@ import com.mdaksh.m3uvideoplayer.ui.common.setupUniversalHeader
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
+import com.mdaksh.m3uvideoplayer.data.time.TimeZoneManager
+import javax.inject.Inject
+
 /** Settings ➔ Playlists: lists all saved playlists; tapping one opens the Edit Playlist screen. */
 @AndroidEntryPoint
 class SettingsPlaylistsFragment : Fragment() {
@@ -25,6 +28,11 @@ class SettingsPlaylistsFragment : Fragment() {
 
     private val viewModel: SettingsPlaylistsViewModel by viewModels()
     private lateinit var adapter: SettingsPlaylistAdapter
+    
+    @Inject
+    lateinit var timeZoneManager: TimeZoneManager
+    
+    private var currentZone: java.time.ZoneId = java.time.ZoneId.systemDefault()
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -42,6 +50,13 @@ class SettingsPlaylistsFragment : Fragment() {
                     SettingsPlaylistsFragmentDirections
                         .actionSettingsPlaylistsFragmentToEditPlaylistFragment(playlist.id)
                 )
+            },
+            formatLastUpdated = { epochMs ->
+                if (epochMs > 0) {
+                    getString(R.string.last_updated_at, timeZoneManager.formatDateTime(epochMs, currentZone))
+                } else {
+                    getString(R.string.last_updated_never)
+                }
             }
         )
         binding.recyclerViewPlaylists.adapter = adapter
@@ -50,9 +65,19 @@ class SettingsPlaylistsFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.playlists.collect { list ->
-                    adapter.submitList(list)
-                    binding.textEmptyState.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+                launch {
+                    viewModel.playlists.collect { list ->
+                        adapter.submitList(list)
+                        binding.textEmptyState.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+                    }
+                }
+                launch {
+                    timeZoneManager.resolvedTimeZone.collect { resolved ->
+                        if (currentZone != resolved.zone) {
+                            currentZone = resolved.zone
+                            adapter.notifyDataSetChanged()
+                        }
+                    }
                 }
             }
         }
