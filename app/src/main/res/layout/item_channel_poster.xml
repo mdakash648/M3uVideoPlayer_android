@@ -6,6 +6,8 @@
     android:layout_height="wrap_content"
     android:layout_margin="4dp"
     android:focusable="true"
+    android:clickable="true"
+    android:longClickable="true"
     android:foreground="@drawable/sel_item_focus"
     android:stateListAnimator="@animator/focus_scale"
     app:cardCornerRadius="4dp"

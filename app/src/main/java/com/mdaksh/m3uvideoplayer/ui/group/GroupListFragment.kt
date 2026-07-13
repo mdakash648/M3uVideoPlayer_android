@@ -16,6 +16,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.mdaksh.m3uvideoplayer.R
 import com.mdaksh.m3uvideoplayer.data.preferences.UserPreferencesRepository
 import com.mdaksh.m3uvideoplayer.databinding.FragmentGroupListBinding
@@ -23,6 +24,7 @@ import com.mdaksh.m3uvideoplayer.domain.model.Channel
 import com.mdaksh.m3uvideoplayer.domain.model.PlaylistResumeTarget
 import com.mdaksh.m3uvideoplayer.ui.common.setupUniversalHeader
 import com.mdaksh.m3uvideoplayer.ui.player.PlayerActivity
+import androidx.media3.common.util.UnstableApi
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -34,6 +36,7 @@ import kotlinx.coroutines.launch
  *
  * Tapping a folder tile opens the Channel List screen filtered to that group (Step 4.2).
  */
+@UnstableApi
 @AndroidEntryPoint
 class GroupListFragment : Fragment() {
 
@@ -59,13 +62,16 @@ class GroupListFragment : Fragment() {
 
         adapter = GroupAdapter(
             onClick = { group -> openGroup(group) },
+            onLongClick = { group -> handleFolderLongClick(group) },
             initialViewMode = viewModel.folderViewMode.value
         )
         binding.recyclerViewGroups.adapter = adapter
 
         searchAdapter = SearchResultAdapter(
             onFolderClick = { group -> openGroup(group) },
-            onFileClick = { channel -> openPlayer(channel) }
+            onFileClick = { channel -> openPlayer(channel) },
+            onFolderLongClick = { group -> handleFolderLongClick(group) },
+            onFileLongClick = { channel -> handleSearchFileLongClick(channel) }
         )
         binding.recyclerViewSearch.adapter = searchAdapter
 
@@ -178,6 +184,44 @@ class GroupListFragment : Fragment() {
                 )
             }
         }
+    }
+
+    /**
+     * Folder Delete — long-pressing a folder tile. Only armed inside "Direct Links History"
+     * ([GroupListViewModel.isDeletable]) and never on a pinned/synthetic tile (All channels,
+     * Favorite, All Movies, All Series), since those aren't real folders.
+     * @return true to consume the long-press (dialog shown), false to let it pass through untouched.
+     */
+    private fun handleFolderLongClick(group: GroupItem): Boolean {
+        if (!viewModel.isDeletable.value) return false
+        if (group.isAllChannels || group.isFavorites || group.isAllMovies || group.isAllSeries) return false
+        confirmDeleteFolder(group)
+        return true
+    }
+
+    private fun handleSearchFileLongClick(channel: Channel): Boolean {
+        if (!viewModel.isDeletable.value) return false
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.delete_video_confirm_title)
+            .setMessage(getString(R.string.delete_video_confirm_message, channel.name))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
+                // GroupListViewModel needs a deleteVideo function as well if we support search hits
+                // but for now let's just use the existing logic if possible.
+                // Actually, I'll add deleteVideo to GroupListViewModel too.
+                viewModel.deleteVideo(channel)
+            }
+            .show()
+        return true
+    }
+
+    private fun confirmDeleteFolder(group: GroupItem) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.delete_folder_confirm_title)
+            .setMessage(getString(R.string.delete_folder_confirm_message, group.name))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ -> viewModel.deleteFolder(group.name) }
+            .show()
     }
 
     /**

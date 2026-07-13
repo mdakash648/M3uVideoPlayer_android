@@ -16,6 +16,10 @@ interface ChannelDao {
     @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName ORDER BY position ASC")
     fun getChannelsByGroup(playlistId: Long, groupName: String): Flow<List<ChannelEntity>>
 
+    /** One-shot (non-Flow) snapshot of every channel inside a single group — used by folder delete. */
+    @Query("SELECT * FROM channels WHERE playlistId = :playlistId AND groupName = :groupName")
+    suspend fun getChannelsInGroupOnce(playlistId: Long, groupName: String): List<ChannelEntity>
+
     @Query("SELECT * FROM channels WHERE isFavorite = 1")
     fun getFavoriteChannels(): Flow<List<ChannelEntity>>
 
@@ -28,6 +32,14 @@ interface ChannelDao {
 
     @Query("DELETE FROM channels WHERE playlistId = :playlistId")
     suspend fun deleteChannelsForPlaylist(playlistId: Long)
+
+    /** Folder Delete — removes every channel inside a single group in one shot. */
+    @Query("DELETE FROM channels WHERE playlistId = :playlistId AND groupName = :groupName")
+    suspend fun deleteChannelsByGroup(playlistId: Long, groupName: String)
+
+    /** Video Delete — removes a single channel row by its id. */
+    @Query("DELETE FROM channels WHERE id = :channelId")
+    suspend fun deleteChannelById(channelId: Long)
 
     @Update
     suspend fun updateChannel(channel: ChannelEntity)

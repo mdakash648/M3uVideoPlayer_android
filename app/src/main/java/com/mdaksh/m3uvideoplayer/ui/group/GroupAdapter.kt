@@ -39,6 +39,8 @@ data class GroupItem(
  */
 class GroupAdapter(
     private val onClick: (GroupItem) -> Unit,
+    /** Folder Delete — return true to consume the long-press (show the delete dialog), false to ignore it. */
+    private val onLongClick: (GroupItem) -> Boolean = { false },
     initialViewMode: FolderViewMode = FolderViewMode.DEFAULT
 ) : ListAdapter<GroupItem, GroupAdapter.BaseGroupViewHolder>(DIFF_CALLBACK) {
 
@@ -64,30 +66,32 @@ class GroupAdapter(
     }
 
     override fun onBindViewHolder(holder: BaseGroupViewHolder, position: Int) {
-        holder.bind(getItem(position), onClick)
+        holder.bind(getItem(position), onClick, onLongClick)
     }
 
     abstract class BaseGroupViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        abstract fun bind(group: GroupItem, onClick: (GroupItem) -> Unit)
+        abstract fun bind(group: GroupItem, onClick: (GroupItem) -> Unit, onLongClick: (GroupItem) -> Boolean)
     }
 
     /** [FolderViewMode.GRID] — the original card tile. */
     inner class GridViewHolder(private val binding: ItemGroupBinding) :
         BaseGroupViewHolder(binding.root) {
-        override fun bind(group: GroupItem, onClick: (GroupItem) -> Unit) {
+        override fun bind(group: GroupItem, onClick: (GroupItem) -> Unit, onLongClick: (GroupItem) -> Boolean) {
             binding.textGroupName.text = labelFor(group, binding.root.context)
             binding.textGroupCount.text = countLabel(group.channelCount)
             binding.root.setOnClickListener { onClick(group) }
+            binding.root.setOnLongClickListener { onLongClick(group) }
         }
     }
 
     /** [FolderViewMode.LIST] — a compact horizontal row. */
     inner class ListViewHolder(private val binding: ItemGroupListBinding) :
         BaseGroupViewHolder(binding.root) {
-        override fun bind(group: GroupItem, onClick: (GroupItem) -> Unit) {
+        override fun bind(group: GroupItem, onClick: (GroupItem) -> Unit, onLongClick: (GroupItem) -> Boolean) {
             binding.textGroupName.text = labelFor(group, binding.root.context)
             binding.textGroupCount.text = countLabel(group.channelCount)
             binding.root.setOnClickListener { onClick(group) }
+            binding.root.setOnLongClickListener { onLongClick(group) }
         }
     }
 

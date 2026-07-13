@@ -15,9 +15,11 @@ import com.mdaksh.m3uvideoplayer.R
 import com.mdaksh.m3uvideoplayer.databinding.FragmentPlaylistBinding
 import com.mdaksh.m3uvideoplayer.ui.common.setupUniversalHeader
 import com.mdaksh.m3uvideoplayer.ui.player.PlayerActivity
+import androidx.media3.common.util.UnstableApi
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
+@UnstableApi
 @AndroidEntryPoint
 class PlaylistFragment : Fragment() {
 
@@ -69,6 +71,10 @@ class PlaylistFragment : Fragment() {
 
         binding.fabAddPlaylist.setOnClickListener {
             findNavController().navigate(R.id.action_playlistFragment_to_addPlaylistFragment)
+        }
+
+        binding.fabDirectLink.setOnClickListener {
+            findNavController().navigate(R.id.action_playlistFragment_to_directLinkFragment)
         }
 
         binding.swipeRefresh.setOnRefreshListener {

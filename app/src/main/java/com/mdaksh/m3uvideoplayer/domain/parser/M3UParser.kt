@@ -44,12 +44,29 @@ class M3UParser {
                 } else if (!trimmed.startsWith("#")) {
                     // It's a URL line
                     val contentType = inferContentType(currentGroup, currentName)
+                    
+                    var finalGroup = currentGroup
+                    if (finalGroup.isEmpty()) {
+                        if (contentType == ContentType.SERIES) {
+                            val match = episodePattern.find(currentName)
+                            if (match != null) {
+                                val index = match.range.first
+                                val prefix = currentName.substring(0, index).trim(' ', '.', '-', '_')
+                                finalGroup = if (prefix.isNotEmpty()) prefix else "Series"
+                            } else {
+                                finalGroup = "Series"
+                            }
+                        } else if (contentType == ContentType.MOVIE) {
+                            finalGroup = "Movie"
+                        }
+                    }
+
                     channels.add(
                         Channel(
                             playlistId = playlistId,
                             name = currentName,
                             logo = currentLogo,
-                            group = currentGroup,
+                            group = finalGroup,
                             url = trimmed,
                             epgId = currentEpgId,
                             contentType = contentType,

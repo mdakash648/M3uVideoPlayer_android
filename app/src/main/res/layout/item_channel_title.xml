@@ -5,6 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:focusable="true"
+    android:clickable="true"
+    android:longClickable="true"
     android:background="@drawable/sel_item_focus"
     android:stateListAnimator="@animator/focus_scale"
     android:minHeight="40dp"

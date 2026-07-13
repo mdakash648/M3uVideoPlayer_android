@@ -167,6 +167,27 @@ class PlayerActivity : AppCompatActivity() {
     private var turboActive = false
     private var speedBeforeTurbo = 1.0f
 
+    /** [FEATURE UPDATE] Left-zone touch long-press turbo (2x) state — separate flag from the
+     * D-pad's [centerLongPressFired] so a touch hold and a remote OK hold never interfere with
+     * each other; both funnel into the same [startTurbo]/[stopTurbo]. */
+    private var leftTouchTurboActive = false
+
+    /**
+     * [FEATURE UPDATE] Manually-timed replacement for [GestureDetector]'s built-in onLongPress:
+     * scheduled ourselves on ACTION_DOWN inside the left 30% zone and cancelled on ACTION_UP/
+     * CANCEL/real-drag, so ordinary hand tremor while holding still can't silently cancel it the
+     * way GestureDetector's own touch-slop-based cancellation does.
+     */
+    private val leftLongPressTurboRunnable = Runnable {
+        if (!locked && !draggingBrightness && !draggingVolume && !draggingSeek) {
+            handler.removeCallbacks(tapTimeoutRunnable)
+            tapCount = 0
+            pendingTapZone = null
+            leftTouchTurboActive = true
+            startTurbo()
+        }
+    }
+
     /**
      * promt1 — OK/center is fully Activity-managed (see [dispatchKeyEvent]/[handleCenterKey]), so
      * we detect its long-press ourselves rather than via [onKeyLongPress] (the focused button would
@@ -1263,9 +1284,26 @@ class PlayerActivity : AppCompatActivity() {
                     tapDownX = event.x
                     tapDownY = event.y
                     tapDownTime = event.eventTime
+                    // [FEATURE UPDATE] Arm the left-zone 2x turbo hold. Cancelled on UP/CANCEL
+                    // below, or from onScroll the moment a real drag is recognized.
+                    val width = binding.playerRoot.width
+                    if (!locked && width > 0 && event.x < width * SEEK_ZONE_FRACTION) {
+                        handler.removeCallbacks(leftLongPressTurboRunnable)
+                        handler.postDelayed(
+                            leftLongPressTurboRunnable,
+                            ViewConfiguration.getLongPressTimeout().toLong()
+                        )
+                    }
                 }
 
                 MotionEvent.ACTION_UP -> {
+                    // [FEATURE UPDATE] Left-zone long-press turbo — release restores normal speed.
+                    // Guarded first so the long-press-then-lift never also gets read as a tap.
+                    handler.removeCallbacks(leftLongPressTurboRunnable)
+                    if (leftTouchTurboActive) {
+                        leftTouchTurboActive = false
+                        stopTurbo()
+                    }
                     // A "tap" is a touch-up close to where it went down, quickly, and not the
                     // tail end of a drag (seek/brightness/volume) that was already handled live.
                     val wasDragging = draggingSeek || draggingBrightness || draggingVolume
@@ -1288,6 +1326,11 @@ class PlayerActivity : AppCompatActivity() {
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
+                    handler.removeCallbacks(leftLongPressTurboRunnable)
+                    if (leftTouchTurboActive) {
+                        leftTouchTurboActive = false
+                        stopTurbo()
+                    }
                     val wasDragging = draggingSeek || draggingBrightness || draggingVolume
                     commitSeekDrag()
                     if (wasDragging) {
@@ -1465,10 +1508,25 @@ class PlayerActivity : AppCompatActivity() {
             return true
         }
 
+        /**
+         * [FEATURE UPDATE] NOTE: the left-zone 2x turbo long-press is now scheduled manually via
+         * [leftLongPressTurboRunnable] in [setupGestures] instead of relying on this callback.
+         * GestureDetector cancels its own LONG_PRESS message the moment it sees ANY movement past
+         * its internal touch-slop (a few px) — ordinary hand tremor over ~500ms of holding still
+         * was enough to silently cancel it, so the gesture never fired in practice.
+         */
+
         override fun onScroll(
             e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float
         ): Boolean {
             if (e1 == null) return false
+            // [FEATURE UPDATE] A real drag means this is a swipe, not a still hold — cancel the
+            // pending/active left-zone turbo so it doesn't fire mid-swipe or fight the gesture.
+            if (leftTouchTurboActive) {
+                leftTouchTurboActive = false
+                stopTurbo()
+            }
+            handler.removeCallbacks(leftLongPressTurboRunnable)
             val dx = e2.x - e1.x
             val dy = e2.y - e1.y
             if (!draggingBrightness && !draggingVolume && !draggingSeek) {

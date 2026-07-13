@@ -22,6 +22,20 @@
         <action
             android:id="@+id/action_playlistFragment_to_settingsFragment"
             app:destination="@id/settingsFragment" />
+
+        <action
+            android:id="@+id/action_playlistFragment_to_directLinkFragment"
+            app:destination="@id/directLinkFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/directLinkFragment"
+        android:name="com.mdaksh.m3uvideoplayer.ui.directlink.DirectLinkFragment"
+        android:label="Direct Link Viewer"
+        tools:layout="@layout/fragment_direct_link">
+        <action
+            android:id="@+id/action_directLinkFragment_to_settingsFragment"
+            app:destination="@id/settingsFragment" />
     </fragment>
 
     <fragment

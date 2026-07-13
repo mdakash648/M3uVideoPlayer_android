@@ -9,9 +9,18 @@ import com.mdaksh.m3uvideoplayer.data.preferences.UserPreferencesRepository.Comp
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+import com.mdaksh.m3uvideoplayer.domain.usecase.ExportHistoryUseCase
+import com.mdaksh.m3uvideoplayer.domain.usecase.ImportHistoryUseCase
+import android.content.ContentResolver
+import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Backs the Settings screen's Display section — the two column-count steppers (Grid & Poster).
@@ -23,8 +32,20 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val exportHistoryUseCase: ExportHistoryUseCase,
+    private val importHistoryUseCase: ImportHistoryUseCase
 ) : ViewModel() {
+
+    private val _isBusy = MutableStateFlow(false)
+    val isBusy: StateFlow<Boolean> = _isBusy.asStateFlow()
+
+    private val _event = MutableStateFlow<String?>(null)
+    val event: StateFlow<String?> = _event.asStateFlow()
+
+    fun consumeEvent() {
+        _event.value = null
+    }
 
     /** Current Grid-view column count (Auto sentinel or a fixed value in [MIN, MAX]). */
     val gridColumnCount: StateFlow<Int> = userPreferencesRepository.gridColumnCountFlow
@@ -102,6 +123,45 @@ class SettingsViewModel @Inject constructor(
             up -> (current + 1).coerceAtMost(COLUMN_COUNT_MAX)
             current <= COLUMN_COUNT_MIN -> COLUMN_COUNT_AUTO
             else -> current - 1
+        }
+    }
+
+    fun exportHistoryTo(contentResolver: ContentResolver, destination: Uri) {
+        if (_isBusy.value) return
+        _isBusy.value = true
+        viewModelScope.launch {
+            try {
+                val m3uData = exportHistoryUseCase()
+                withContext(Dispatchers.IO) {
+                    contentResolver.openOutputStream(destination)?.use { output ->
+                        output.write(m3uData.toByteArray(Charsets.UTF_8))
+                    } ?: throw IllegalStateException("Couldn't open the destination file")
+                }
+                _event.value = "History exported successfully"
+            } catch (e: Exception) {
+                _event.value = e.message?.takeIf { it.isNotBlank() } ?: "Couldn't export history."
+            } finally {
+                _isBusy.value = false
+            }
+        }
+    }
+
+    fun importHistoryFrom(contentResolver: ContentResolver, source: Uri) {
+        if (_isBusy.value) return
+        _isBusy.value = true
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(source)?.use { input ->
+                        importHistoryUseCase(input)
+                    } ?: throw IllegalStateException("Couldn't open the selected file")
+                }
+                _event.value = "History imported successfully"
+            } catch (e: Exception) {
+                _event.value = e.message?.takeIf { it.isNotBlank() } ?: "Couldn't import history."
+            } finally {
+                _isBusy.value = false
+            }
         }
     }
 }

@@ -18,4 +18,8 @@ interface GroupDao {
 
     @Query("DELETE FROM playlist_groups WHERE playlistId = :playlistId")
     suspend fun deleteGroupsByPlaylist(playlistId: Long)
+
+    /** Folder Delete — removes a single group (folder) row. [groupId] is [GroupEntity.id], the group name. */
+    @Query("DELETE FROM playlist_groups WHERE playlistId = :playlistId AND id = :groupId")
+    suspend fun deleteGroup(playlistId: Long, groupId: String)
 }

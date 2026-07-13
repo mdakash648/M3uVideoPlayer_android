@@ -23,7 +23,9 @@ sealed interface SearchResult {
 /** Two-view-type adapter: folder rows reuse [ItemGroupListBinding]; files get [ItemSearchFileBinding]. */
 class SearchResultAdapter(
     private val onFolderClick: (GroupItem) -> Unit,
-    private val onFileClick: (Channel) -> Unit
+    private val onFileClick: (Channel) -> Unit,
+    private val onFolderLongClick: (GroupItem) -> Boolean = { false },
+    private val onFileLongClick: (Channel) -> Boolean = { false }
 ) : ListAdapter<SearchResult, RecyclerView.ViewHolder>(DIFF_CALLBACK) {
 
     override fun getItemViewType(position: Int): Int = when (getItem(position)) {
@@ -53,6 +55,7 @@ class SearchResultAdapter(
             binding.textGroupCount.text =
                 if (group.channelCount == 1) "1 channel" else "${group.channelCount} channels"
             binding.root.setOnClickListener { onFolderClick(group) }
+            binding.root.setOnLongClickListener { onFolderLongClick(group) }
         }
     }
 
@@ -67,6 +70,7 @@ class SearchResultAdapter(
                 error(android.R.drawable.ic_menu_gallery)
             }
             binding.root.setOnClickListener { onFileClick(channel) }
+            binding.root.setOnLongClickListener { onFileLongClick(channel) }
         }
     }
 

@@ -13,19 +13,23 @@ import androidx.appcompat.widget.ActionMenuView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.util.UnstableApi
 import com.google.android.material.appbar.MaterialToolbar
 import com.mdaksh.m3uvideoplayer.data.work.PlaylistUpdateScheduler
 import com.mdaksh.m3uvideoplayer.domain.usecase.GetPlaylistsUseCase
+import com.mdaksh.m3uvideoplayer.domain.usecase.OpenExternalM3UUseCase
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@UnstableApi
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
     @Inject lateinit var getPlaylistsUseCase: GetPlaylistsUseCase
     @Inject lateinit var updateScheduler: PlaylistUpdateScheduler
+    @Inject lateinit var openExternalM3UUseCase: OpenExternalM3UUseCase
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +46,38 @@ class MainActivity : AppCompatActivity() {
         // Kick off a one-time refresh for any playlist set to "On application start".
         lifecycleScope.launch {
             updateScheduler.runStartupSyncs(getPlaylistsUseCase().first())
+        }
+
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent == null) return
+        if (intent.action == android.content.Intent.ACTION_VIEW && intent.data != null) {
+            val uri = intent.data!!
+            lifecycleScope.launch {
+                try {
+                    val channels = openExternalM3UUseCase(uri)
+                    if (channels.isNotEmpty()) {
+                        val playerIntent = com.mdaksh.m3uvideoplayer.ui.player.PlayerActivity.newIntent(
+                            context = this@MainActivity,
+                            channels = channels,
+                            startIndex = 0,
+                            resumePositionMs = -1L
+                        )
+                        startActivity(playerIntent)
+                    } else {
+                        android.widget.Toast.makeText(this@MainActivity, "No valid channels found.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(this@MainActivity, "Failed to open M3U: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 

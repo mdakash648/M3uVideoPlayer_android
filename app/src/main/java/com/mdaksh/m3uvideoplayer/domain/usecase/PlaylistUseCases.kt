@@ -58,3 +58,27 @@ class SyncPlaylistUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(playlist: Playlist) = repository.syncPlaylist(playlist)
 }
+
+class DeleteGroupUseCase @Inject constructor(
+    private val channelRepository: com.mdaksh.m3uvideoplayer.domain.repository.ChannelRepository,
+    private val groupDao: com.mdaksh.m3uvideoplayer.data.local.dao.GroupDao,
+    private val channelDao: com.mdaksh.m3uvideoplayer.data.local.dao.ChannelDao
+) {
+    /**
+     * Deletes a group and all channels belonging to it.
+     * Transactional-like behavior: first wipe channels, then the group header.
+     */
+    suspend operator fun invoke(playlistId: Long, groupId: String) {
+        channelDao.deleteChannelsByGroup(playlistId, groupId)
+        groupDao.deleteGroup(playlistId, groupId)
+    }
+}
+
+class DeleteChannelUseCase @Inject constructor(
+    private val channelDao: com.mdaksh.m3uvideoplayer.data.local.dao.ChannelDao
+) {
+    suspend operator fun invoke(channelId: Long) {
+        channelDao.deleteChannelById(channelId)
+    }
+}
+

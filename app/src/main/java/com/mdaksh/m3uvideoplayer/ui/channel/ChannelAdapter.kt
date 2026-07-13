@@ -22,6 +22,8 @@ import com.mdaksh.m3uvideoplayer.domain.model.Channel
 class ChannelAdapter(
     private val onClick: (Channel) -> Unit,
     private val onToggleFavorite: (Channel) -> Unit,
+    /** Video Delete — return true to consume the long-press (show the delete dialog), false to ignore it. */
+    private val onLongClick: (Channel) -> Boolean = { false },
     initialViewMode: ChannelViewMode = ChannelViewMode.DEFAULT
 ) : ListAdapter<Channel, ChannelAdapter.BaseChannelViewHolder>(DIFF_CALLBACK) {
 
@@ -52,7 +54,7 @@ class ChannelAdapter(
     }
 
     override fun onBindViewHolder(holder: BaseChannelViewHolder, position: Int) {
-        holder.bind(getItem(position), onClick, onToggleFavorite)
+        holder.bind(getItem(position), onClick, onToggleFavorite, onLongClick)
     }
 
     /** Common contract every per-mode ViewHolder implements so [onBindViewHolder] stays generic. */
@@ -60,7 +62,8 @@ class ChannelAdapter(
         abstract fun bind(
             channel: Channel,
             onClick: (Channel) -> Unit,
-            onToggleFavorite: (Channel) -> Unit
+            onToggleFavorite: (Channel) -> Unit,
+            onLongClick: (Channel) -> Boolean
         )
     }
 
@@ -71,7 +74,8 @@ class ChannelAdapter(
         override fun bind(
             channel: Channel,
             onClick: (Channel) -> Unit,
-            onToggleFavorite: (Channel) -> Unit
+            onToggleFavorite: (Channel) -> Unit,
+            onLongClick: (Channel) -> Boolean
         ) {
             binding.textChannelName.text = channel.name
             binding.textChannelGroup.text = channel.group
@@ -85,6 +89,7 @@ class ChannelAdapter(
                 else android.R.drawable.btn_star_big_off
             )
             binding.root.setOnClickListener { onClick(channel) }
+            binding.root.setOnLongClickListener { onLongClick(channel) }
             binding.buttonFavorite.setOnClickListener { onToggleFavorite(channel) }
         }
     }
@@ -96,7 +101,8 @@ class ChannelAdapter(
         override fun bind(
             channel: Channel,
             onClick: (Channel) -> Unit,
-            onToggleFavorite: (Channel) -> Unit
+            onToggleFavorite: (Channel) -> Unit,
+            onLongClick: (Channel) -> Boolean
         ) {
             binding.textChannelName.text = channel.name
             binding.imageLogo.load(channel.logo) {
@@ -109,6 +115,7 @@ class ChannelAdapter(
                 else android.R.drawable.btn_star_big_off
             )
             binding.root.setOnClickListener { onClick(channel) }
+            binding.root.setOnLongClickListener { onLongClick(channel) }
             binding.buttonFavorite.setOnClickListener { onToggleFavorite(channel) }
         }
     }
@@ -120,7 +127,8 @@ class ChannelAdapter(
         override fun bind(
             channel: Channel,
             onClick: (Channel) -> Unit,
-            onToggleFavorite: (Channel) -> Unit
+            onToggleFavorite: (Channel) -> Unit,
+            onLongClick: (Channel) -> Boolean
         ) {
             binding.textChannelName.text = channel.name
             binding.buttonFavorite.setImageResource(
@@ -128,6 +136,7 @@ class ChannelAdapter(
                 else android.R.drawable.btn_star_big_off
             )
             binding.root.setOnClickListener { onClick(channel) }
+            binding.root.setOnLongClickListener { onLongClick(channel) }
             binding.buttonFavorite.setOnClickListener { onToggleFavorite(channel) }
         }
     }
@@ -142,7 +151,8 @@ class ChannelAdapter(
         override fun bind(
             channel: Channel,
             onClick: (Channel) -> Unit,
-            onToggleFavorite: (Channel) -> Unit
+            onToggleFavorite: (Channel) -> Unit,
+            onLongClick: (Channel) -> Boolean
         ) {
             binding.textChannelName.text = channel.name
             binding.imageLogo.load(channel.logo) {
@@ -155,6 +165,7 @@ class ChannelAdapter(
                 else android.R.drawable.btn_star_big_off
             )
             binding.root.setOnClickListener { onClick(channel) }
+            binding.root.setOnLongClickListener { onLongClick(channel) }
             binding.buttonFavorite.setOnClickListener { onToggleFavorite(channel) }
         }
     }

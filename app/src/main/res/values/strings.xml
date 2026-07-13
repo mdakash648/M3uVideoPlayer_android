@@ -212,4 +212,21 @@
     <string name="remove">Remove</string>
     <string name="playlist_updated">Playlist updated</string>
     <string name="playlist_removed">Playlist removed</string>
+
+    <!-- Direct Links History — folder &amp; video delete -->
+    <string name="delete_folder_confirm_title">Delete folder?</string>
+    <string name="delete_folder_confirm_message">\"%1$s\" and all its videos will be permanently deleted. This can\'t be undone.</string>
+    <string name="delete_video_confirm_title">Delete video?</string>
+    <string name="delete_video_confirm_message">\"%1$s\" will be permanently deleted from history. This can\'t be undone.</string>
+
+    <!-- Direct Links Viewer -->
+    <string name="direct_link_viewer">Direct Link Viewer</string>
+    <string name="direct_link_url">Video URL</string>
+    <string name="play">Play</string>
+
+    <!-- History Export/Import -->
+    <string name="action_export_history">Export History Playlist</string>
+    <string name="action_export_history_subtitle">Save your direct links history as an M3U file</string>
+    <string name="action_import_history">Import History Playlist</string>
+    <string name="action_import_history_subtitle">Load a modified history M3U file</string>
 </resources>

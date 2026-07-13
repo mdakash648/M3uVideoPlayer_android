@@ -9,15 +9,18 @@ import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.mdaksh.m3uvideoplayer.ui.player.PlayerActivity
+import androidx.annotation.OptIn
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.media3.common.util.UnstableApi
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.mdaksh.m3uvideoplayer.R
 import com.mdaksh.m3uvideoplayer.data.preferences.UserPreferencesRepository
 import com.mdaksh.m3uvideoplayer.databinding.FragmentChannelListBinding
@@ -26,6 +29,7 @@ import com.mdaksh.m3uvideoplayer.ui.common.setupUniversalHeader
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
+@UnstableApi
 @AndroidEntryPoint
 class ChannelListFragment : Fragment() {
 
@@ -69,6 +73,7 @@ class ChannelListFragment : Fragment() {
         adapter = ChannelAdapter(
             onClick = { channel -> openPlayer(channel) },
             onToggleFavorite = { channel -> viewModel.toggleFavorite(channel) },
+            onLongClick = { channel -> handleVideoLongClick(channel) },
             initialViewMode = initialMode
         )
         binding.recyclerViewChannels.layoutManager = layoutManagerFor(initialMode)
@@ -119,6 +124,27 @@ class ChannelListFragment : Fragment() {
         val orderedChannels = viewModel.channels.value
         val startIndex = orderedChannels.indexOfFirst { it.id == channel.id }.coerceAtLeast(0)
         startActivity(PlayerActivity.newIntent(requireContext(), orderedChannels, startIndex))
+    }
+
+    /**
+     * Video Delete — long-pressing a channel row. Only armed inside "Direct Links History"
+     * ([ChannelListViewModel.isDeletable]); every other (real M3U/Xtream) playlist stays
+     * browse-only, exactly as before.
+     * @return true to consume the long-press (dialog shown), false to let it pass through untouched.
+     */
+    private fun handleVideoLongClick(channel: Channel): Boolean {
+        if (!viewModel.isDeletable.value) return false
+        confirmDeleteVideo(channel)
+        return true
+    }
+
+    private fun confirmDeleteVideo(channel: Channel) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.delete_video_confirm_title)
+            .setMessage(getString(R.string.delete_video_confirm_message, channel.name))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ -> viewModel.deleteVideo(channel) }
+            .show()
     }
 
     // --- Toolbar ------------------------------------------------------------------------------

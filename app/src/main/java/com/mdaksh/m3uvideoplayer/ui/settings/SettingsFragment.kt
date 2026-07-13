@@ -17,6 +17,9 @@ import com.mdaksh.m3uvideoplayer.ui.common.setupUniversalHeader
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+
 /**
  * Settings screen — top-level menu. Reuses the shared activity toolbar to show a back
  * arrow + "Settings" title; each row below opens its own dedicated screen.
@@ -28,6 +31,16 @@ class SettingsFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: SettingsViewModel by viewModels()
+
+    private val exportHistoryLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("audio/x-mpegurl")) { uri ->
+            uri?.let { viewModel.exportHistoryTo(requireContext().contentResolver, it) }
+        }
+
+    private val importHistoryLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { viewModel.importHistoryFrom(requireContext().contentResolver, it) }
+        }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -53,6 +66,26 @@ class SettingsFragment : Fragment() {
         }
         binding.cardMenuBackupRestore.setOnClickListener {
             findNavController().navigate(R.id.action_settingsFragment_to_backupRestoreFragment)
+        }
+
+        binding.cardExportHistory.setOnClickListener {
+            exportHistoryLauncher.launch("direct_links_history.m3u")
+        }
+        binding.cardImportHistory.setOnClickListener {
+            importHistoryLauncher.launch(arrayOf("*/*"))
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.event.collect { event ->
+                        if (event != null) {
+                            Toast.makeText(requireContext(), event, Toast.LENGTH_LONG).show()
+                            viewModel.consumeEvent()
+                        }
+                    }
+                }
+            }
         }
 
         setupColumnSteppers()

@@ -5,7 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mdaksh.m3uvideoplayer.data.preferences.UserPreferencesRepository
 import com.mdaksh.m3uvideoplayer.domain.model.Channel
+import com.mdaksh.m3uvideoplayer.domain.usecase.DeleteDirectLinkVideoUseCase
 import com.mdaksh.m3uvideoplayer.domain.usecase.GetChannelsForPlaylistUseCase
+import com.mdaksh.m3uvideoplayer.domain.usecase.IsDirectLinksHistoryPlaylistUseCase
 import com.mdaksh.m3uvideoplayer.domain.usecase.ToggleFavoriteChannelUseCase
 import com.mdaksh.m3uvideoplayer.util.FuzzyIndex
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -26,10 +29,26 @@ class ChannelListViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     getChannelsForPlaylistUseCase: GetChannelsForPlaylistUseCase,
     private val toggleFavoriteChannelUseCase: ToggleFavoriteChannelUseCase,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val isDirectLinksHistoryPlaylistUseCase: IsDirectLinksHistoryPlaylistUseCase,
+    private val deleteDirectLinkVideoUseCase: DeleteDirectLinkVideoUseCase
 ) : ViewModel() {
 
     private val playlistId: Long = savedStateHandle.get<Long>("playlistId") ?: 0L
+
+    private val _isDeletable = MutableStateFlow(false)
+    val isDeletable: StateFlow<Boolean> = _isDeletable.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _isDeletable.value = isDirectLinksHistoryPlaylistUseCase(playlistId)
+        }
+    }
+
+    /** Deletes a single Direct Link entry. No-op safety belt: only ever called when [isDeletable] is true. */
+    fun deleteVideo(channel: Channel) {
+        viewModelScope.launch { deleteDirectLinkVideoUseCase(channel) }
+    }
 
     /**
      * Step 4.2 — Optional group-title filter passed by [com.mdaksh.m3uvideoplayer.ui.group.GroupListFragment].

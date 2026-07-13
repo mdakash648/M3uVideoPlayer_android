@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.mdaksh.m3uvideoplayer.data.preferences.UserPreferencesRepository
 import com.mdaksh.m3uvideoplayer.domain.model.Channel
 import com.mdaksh.m3uvideoplayer.domain.model.PlaylistResumeTarget
+import com.mdaksh.m3uvideoplayer.domain.usecase.DeleteDirectLinkFolderUseCase
 import com.mdaksh.m3uvideoplayer.domain.usecase.GetChannelsForPlaylistUseCase
+import com.mdaksh.m3uvideoplayer.domain.usecase.IsDirectLinksHistoryPlaylistUseCase
 import com.mdaksh.m3uvideoplayer.domain.usecase.ObservePlaylistResumeTargetsUseCase
 import com.mdaksh.m3uvideoplayer.util.FuzzyIndex
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -28,10 +31,32 @@ class GroupListViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val getChannelsForPlaylistUseCase: GetChannelsForPlaylistUseCase,
     observePlaylistResumeTargetsUseCase: ObservePlaylistResumeTargetsUseCase,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val isDirectLinksHistoryPlaylistUseCase: IsDirectLinksHistoryPlaylistUseCase,
+    private val deleteDirectLinkFolderUseCase: DeleteDirectLinkFolderUseCase,
+    private val deleteDirectLinkVideoUseCase: com.mdaksh.m3uvideoplayer.domain.usecase.DeleteDirectLinkVideoUseCase
 ) : ViewModel() {
 
     val playlistId: Long = savedStateHandle.get<Long>("playlistId") ?: 0L
+
+    private val _isDeletable = MutableStateFlow(false)
+    val isDeletable: StateFlow<Boolean> = _isDeletable.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _isDeletable.value = isDirectLinksHistoryPlaylistUseCase(playlistId)
+        }
+    }
+
+    /** Deletes [groupName] and every video inside it. No-op safety belt: only ever called when [isDeletable] is true. */
+    fun deleteFolder(groupName: String) {
+        viewModelScope.launch { deleteDirectLinkFolderUseCase(playlistId, groupName) }
+    }
+
+    /** Deletes a single Direct Link entry. Used by global search hits. */
+    fun deleteVideo(channel: Channel) {
+        viewModelScope.launch { deleteDirectLinkVideoUseCase(channel) }
+    }
 
     /**
      * All Series sub-screen flag. When true this screen shows only per-series folders (SERIES
