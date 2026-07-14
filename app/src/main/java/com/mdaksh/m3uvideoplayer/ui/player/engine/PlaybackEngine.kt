@@ -92,6 +92,7 @@ interface PlaybackEngine {
     fun subtitleTracks(): List<TrackInfo>
     fun selectAudioTrack(id: String)
     fun selectSubtitleTrack(id: String)
+    fun clearSubtitleTrack()
 
     /** Toggle between best-fit (letterbox) and fill (crop) video scaling. */
     fun setFillMode(fill: Boolean)

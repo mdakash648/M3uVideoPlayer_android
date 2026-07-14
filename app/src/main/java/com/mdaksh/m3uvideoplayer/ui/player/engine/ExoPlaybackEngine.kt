@@ -202,6 +202,14 @@ class ExoPlaybackEngine(
     override fun selectAudioTrack(id: String) = selectTrack(id, C.TRACK_TYPE_AUDIO)
     override fun selectSubtitleTrack(id: String) = selectTrack(id, C.TRACK_TYPE_TEXT)
 
+    override fun clearSubtitleTrack() {
+        val exo = player ?: return
+        exo.trackSelectionParameters = exo.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .build()
+    }
+
     private fun selectTrack(id: String, type: Int) {
         val exo = player ?: return
         for (group in lastTracks.groups) {

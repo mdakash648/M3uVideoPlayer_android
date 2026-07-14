@@ -139,6 +139,7 @@ class EngineController(
     fun subtitleTracks() = active.subtitleTracks()
     fun selectAudioTrack(id: String) = active.selectAudioTrack(id)
     fun selectSubtitleTrack(id: String) = active.selectSubtitleTrack(id)
+    fun clearSubtitleTrack() = active.clearSubtitleTrack()
     fun setFillMode(fill: Boolean) = active.setFillMode(fill)
     val audioSessionId: Int get() = active.audioSessionId
 

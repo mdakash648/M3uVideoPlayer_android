@@ -169,6 +169,7 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Index into [qualityVariants] currently being played. */
     private var currentQualityIndex: Int = 0
+    private var attemptedQualityIndices = mutableSetOf<Int>()
 
     /** The item URL [qualityVariants] was generated from, so a replay (recovery/resume) never regenerates. */
     private var qualityBaseUrl: String? = null
@@ -177,38 +178,38 @@ class PlayerActivity : AppCompatActivity() {
     private var qualityHeaderSuffix: String = ""
 
     /** Item D — true while "Auto" is selected; the observer may then swap quality on network signals. */
-    private var autoQualityEnabled: Boolean = true
+    /* private var autoQualityEnabled: Boolean = true */
 
     /** True only for a URL that yielded a real ladder (more than the sole Original entry). */
     private val hasQualityOptions: Boolean get() = qualityVariants.size > 1
 
     /** Item D — SystemClock stamp when the current variant's load began, for the handshake timer. */
-    private var qualityLoadStartedAt: Long = 0L
+    /* private var qualityLoadStartedAt: Long = 0L */
 
     /** Item D — true until the current variant renders its first frame (onReady), gating the handshake check. */
-    private var awaitingFirstFrame: Boolean = false
+    /* private var awaitingFirstFrame: Boolean = false */
 
     /** Item D — rolling count of buffering stalls seen since the last render, for the repeat-stall downgrade. */
-    private var recentBufferingStalls: Int = 0
+    /* private var recentBufferingStalls: Int = 0 */
 
     /** Item D — SystemClock stamp of the last uninterrupted-playback upgrade, to rate-limit upgrades. */
-    private var lastAutoUpgradeAt: Long = 0L
+    /* private var lastAutoUpgradeAt: Long = 0L */
 
     /** Item D — SystemClock stamp when the current variant last entered a smooth (non-buffering) window. */
-    private var smoothPlaybackSince: Long = 0L
+    /* private var smoothPlaybackSince: Long = 0L */
 
     /** Item B — while true, an [onError]/[onReady] belongs to a quality/fallback swap, not the user's stream. */
-    private var qualitySwapInFlight: Boolean = false
+    /* private var qualitySwapInFlight: Boolean = false */
 
     /** Item D — resets the stall counter after a clean window, so old stalls don't trigger a late downgrade. */
-    private val clearBufferingStallsRunnable = Runnable { recentBufferingStalls = 0 }
+    /* private val clearBufferingStallsRunnable = Runnable { recentBufferingStalls = 0 } */
 
     /** Item D — fires if the current variant's handshake exceeds the budget before the first frame. */
-    private val handshakeTimeoutRunnable = Runnable {
+    /* private val handshakeTimeoutRunnable = Runnable {
         if (awaitingFirstFrame && autoQualityEnabled && hasQualityOptions) {
             onSlowHandshake()
         }
-    }
+    } */
 
     /** Step 9.4 / gesture rework — LibVLC software gain, 0..200 (%). */
     private var appVolume = VOLUME_NORMAL
@@ -628,7 +629,6 @@ class PlayerActivity : AppCompatActivity() {
 
         // promt2 Item D — (re)arm the handshake stopwatch for this variant load. No-op for a
         // single-variant stream or when Auto is off, so ordinary playback is untouched.
-        armQualityLoadTimers()
     }
 
     // --- promt2: Virtual Quality Manager (Items B/C/D) ----------------------------------------
@@ -655,15 +655,9 @@ class PlayerActivity : AppCompatActivity() {
         qualityVariants = QualityUrlParser.variants(cleanUrl)
         currentQualityIndex = QualityUrlParser.detectedIndex(cleanUrl, qualityVariants)
 
-        // A fresh item resets Auto mode and all of the observer's rolling counters.
-        autoQualityEnabled = true
-        recentBufferingStalls = 0
-        awaitingFirstFrame = false
-        smoothPlaybackSince = 0L
-        lastAutoUpgradeAt = 0L
-        qualitySwapInFlight = false
-        handler.removeCallbacks(handshakeTimeoutRunnable)
-        handler.removeCallbacks(clearBufferingStallsRunnable)
+        // A fresh item resets attempted indices.
+        attemptedQualityIndices.clear()
+        attemptedQualityIndices.add(currentQualityIndex)
 
         updateQualityButtonState()
     }
@@ -682,20 +676,13 @@ class PlayerActivity : AppCompatActivity() {
         if (!hasQualityOptions) return
         handler.removeCallbacks(hideControlsRunnable)
 
-        val current = qualityVariants.getOrNull(currentQualityIndex)?.label ?: qualityVariants.first().label
-        val autoLabel = getString(R.string.player_quality_auto_label, current)
-        val labels = (listOf(autoLabel) + qualityVariants.map { it.label }).toTypedArray()
-        // Checked row: Auto (0) when Auto is on, else the pinned rung (offset by the Auto entry).
-        val checked = if (autoQualityEnabled) 0 else currentQualityIndex + 1
+        val labels = qualityVariants.map { it.label }.toTypedArray()
+        val checked = currentQualityIndex
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.player_quality)
             .setSingleChoiceItems(labels, checked) { dialog, which ->
-                if (which == 0) {
-                    enableAutoQuality()
-                } else {
-                    selectQualityManually(which - 1)
-                }
+                selectQualityManually(which)
                 dialog.dismiss()
             }
             .setOnDismissListener { scheduleHideControls() }
@@ -704,7 +691,6 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Item C — user pinned a specific rung: leave Auto and swap to it (seamless, position-preserving). */
     private fun selectQualityManually(index: Int) {
-        autoQualityEnabled = false
         val label = qualityVariants.getOrNull(index)?.label ?: return
         if (index == currentQualityIndex) {
             showIndicator(getString(R.string.player_osd_quality_selected, label))
@@ -716,12 +702,6 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Item D — user chose Auto: re-enable the observer and re-baseline its timers from now. */
     private fun enableAutoQuality() {
-        autoQualityEnabled = true
-        recentBufferingStalls = 0
-        smoothPlaybackSince = SystemClock.elapsedRealtime()
-        lastAutoUpgradeAt = SystemClock.elapsedRealtime()
-        showIndicator(getString(R.string.player_osd_quality_selected, getString(R.string.player_quality_auto)))
-        scheduleHideControls()
     }
 
     /**
@@ -734,7 +714,7 @@ class PlayerActivity : AppCompatActivity() {
         val variant = qualityVariants.getOrNull(targetIndex) ?: return
         val resumeMs = if (isLiveStream()) 0L else (engine?.positionMs ?: 0L)
         currentQualityIndex = targetIndex
-        qualitySwapInFlight = true
+        attemptedQualityIndices.add(targetIndex)
         announce?.let { showIndicator(it) }
         play(variant.url + qualityHeaderSuffix, startMs = resumeMs)
         scheduleHideControls()
@@ -747,9 +727,10 @@ class PlayerActivity : AppCompatActivity() {
      */
     private fun tryQualityFallback(): Boolean {
         if (!hasQualityOptions) return false
-        val next = currentQualityIndex + 1
-        val lower = qualityVariants.getOrNull(next) ?: return false  // already at the lowest rung
+        val next = (0 until qualityVariants.size).firstOrNull { it !in attemptedQualityIndices }
+            ?: return false
         val from = qualityVariants[currentQualityIndex].label
+        val lower = qualityVariants[next]
         switchQuality(next, getString(R.string.player_quality_fallback, from, lower.label))
         return true
     }
@@ -760,14 +741,6 @@ class PlayerActivity : AppCompatActivity() {
      * downgrades before playback ever starts.
      */
     private fun armQualityLoadTimers() {
-        handler.removeCallbacks(handshakeTimeoutRunnable)
-        if (!hasQualityOptions || !autoQualityEnabled) {
-            awaitingFirstFrame = false
-            return
-        }
-        qualityLoadStartedAt = SystemClock.elapsedRealtime()
-        awaitingFirstFrame = true
-        handler.postDelayed(handshakeTimeoutRunnable, QUALITY_HANDSHAKE_BUDGET_MS)
     }
 
     /**
@@ -776,10 +749,6 @@ class PlayerActivity : AppCompatActivity() {
      * stream. Guarded by the caller ([handshakeTimeoutRunnable]) to Auto + multi-variant.
      */
     private fun onSlowHandshake() {
-        val next = currentQualityIndex + 1
-        val lower = qualityVariants.getOrNull(next) ?: return
-        awaitingFirstFrame = false
-        switchQuality(next, getString(R.string.player_quality_auto_downgrade, lower.label))
     }
 
     /**
@@ -787,11 +756,6 @@ class PlayerActivity : AppCompatActivity() {
      * the LOWEST rung (weak network — stop laddering down one at a time).
      */
     private fun downgradeToLowestQuality() {
-        val lowest = qualityVariants.lastIndex
-        if (lowest <= currentQualityIndex) return  // already at the bottom
-        val label = qualityVariants[lowest].label
-        recentBufferingStalls = 0
-        switchQuality(lowest, getString(R.string.player_quality_auto_downgrade, label))
     }
 
     /**
@@ -801,18 +765,6 @@ class PlayerActivity : AppCompatActivity() {
      * the first-frame handshake is still in flight.
      */
     private fun maybeUpgradeQuality() {
-        if (!autoQualityEnabled || !hasQualityOptions || qualitySwapInFlight || awaitingFirstFrame) return
-        if (currentQualityIndex == 0) return                 // already highest
-        if (engine?.isPlaying != true) return
-        val now = SystemClock.elapsedRealtime()
-        if (smoothPlaybackSince == 0L) { smoothPlaybackSince = now; return }
-        if (now - smoothPlaybackSince < QUALITY_UPGRADE_STABLE_MS) return
-        if (now - lastAutoUpgradeAt < QUALITY_UPGRADE_COOLDOWN_MS) return
-        val higher = currentQualityIndex - 1
-        val label = qualityVariants[higher].label
-        lastAutoUpgradeAt = now
-        smoothPlaybackSince = now
-        switchQuality(higher, getString(R.string.player_quality_auto_upgrade, label))
     }
 
     // --- promt4: persistent resume state ------------------------------------------------------
@@ -938,29 +890,10 @@ class PlayerActivity : AppCompatActivity() {
 
         override fun onBuffering() {
             showLoading()
-            // promt2 Item D — count buffering stalls that happen AFTER the first frame (a mid-play
-            // stall, not the initial connect). Repeated stalls in a short window = weak network =>
-            // downgrade to the lowest rung. A clean window resets the counter.
-            if (autoQualityEnabled && hasQualityOptions && !awaitingFirstFrame && !qualitySwapInFlight) {
-                recentBufferingStalls++
-                smoothPlaybackSince = 0L  // playback is no longer smooth; upgrade window restarts
-                handler.removeCallbacks(clearBufferingStallsRunnable)
-                handler.postDelayed(clearBufferingStallsRunnable, QUALITY_STALL_WINDOW_MS)
-                if (recentBufferingStalls >= QUALITY_STALL_DOWNGRADE_COUNT) {
-                    handler.removeCallbacks(clearBufferingStallsRunnable)
-                    downgradeToLowestQuality()
-                }
-            }
         }
 
         override fun onReady() {
             showVideo()
-            // promt2 Item D — first frame rendered: disarm the handshake stopwatch and open the
-            // smooth-playback upgrade window. A completed quality/fallback swap is now settled.
-            handler.removeCallbacks(handshakeTimeoutRunnable)
-            awaitingFirstFrame = false
-            qualitySwapInFlight = false
-            if (smoothPlaybackSince == 0L) smoothPlaybackSince = SystemClock.elapsedRealtime()
             // Re-apply user preferences the fresh load reset.
             applyVolume()
             engine?.speed = if (turboActive) TURBO_RATE else playbackSpeed
@@ -1484,20 +1417,37 @@ class PlayerActivity : AppCompatActivity() {
             scheduleHideControls()
             return
         }
-        val names = tracks.map { it.label }.toTypedArray()
-        val checked = tracks.indexOfFirst { it.selected }
+
+        val names = if (audio) {
+            tracks.map { it.label }.toTypedArray()
+        } else {
+            (listOf(getString(R.string.player_track_none)) + tracks.map { it.label }).toTypedArray()
+        }
+        
+        val checked = if (audio) {
+            tracks.indexOfFirst { it.selected }
+        } else {
+            val idx = tracks.indexOfFirst { it.selected }
+            if (idx == -1) 0 else idx + 1 // 0 is "None"
+        }
+
         MaterialAlertDialogBuilder(this)
             .setTitle(if (audio) R.string.player_audio_track else R.string.player_subtitle_track)
             .setSingleChoiceItems(names, checked) { dialog, which ->
-                val id = tracks[which].id
-                if (audio) player.selectAudioTrack(id) else player.selectSubtitleTrack(id)
-                showIndicator(
-                    getString(
-                        if (audio) R.string.player_osd_audio_selected
-                        else R.string.player_osd_subtitle_selected,
-                        tracks[which].label
-                    )
-                )
+                if (audio) {
+                    val id = tracks[which].id
+                    player.selectAudioTrack(id)
+                    showIndicator(getString(R.string.player_osd_audio_selected, tracks[which].label))
+                } else {
+                    if (which == 0) {
+                        player.clearSubtitleTrack()
+                        showIndicator(getString(R.string.player_osd_subtitle_selected, getString(R.string.player_track_none)))
+                    } else {
+                        val id = tracks[which - 1].id
+                        player.selectSubtitleTrack(id)
+                        showIndicator(getString(R.string.player_osd_subtitle_selected, tracks[which - 1].label))
+                    }
+                }
                 dialog.dismiss()
             }
             .setOnDismissListener { scheduleHideControls() }

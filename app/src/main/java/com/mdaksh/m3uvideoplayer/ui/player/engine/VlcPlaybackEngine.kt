@@ -119,6 +119,7 @@ class VlcPlaybackEngine(
 
     override fun selectAudioTrack(id: String) { id.toIntOrNull()?.let { player?.audioTrack = it } }
     override fun selectSubtitleTrack(id: String) { id.toIntOrNull()?.let { player?.spuTrack = it } }
+    override fun clearSubtitleTrack() { player?.spuTrack = -1 }
 
     override fun setFillMode(fill: Boolean) {
         player?.videoScale =
