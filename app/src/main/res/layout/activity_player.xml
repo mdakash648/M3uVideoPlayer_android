@@ -284,6 +284,21 @@
             <!-- promt1 §1 — the ABSOLUTE DEFAULT focus target. The remote lands here every time the
                  panel appears and on every brand-new video (see PlayerActivity.focusPlayPause). -->
             <ImageButton
+                android:id="@+id/btnRewind10"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Rewind 10s"
+                android:focusable="true"
+                android:clickable="true"
+                android:foreground="@drawable/bg_player_control_focus"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_replay_10"
+                android:tint="@color/white" />
+
+            <ImageButton
                 android:id="@+id/btnPlayPause"
                 android:layout_width="64dp"
                 android:layout_height="64dp"
@@ -294,6 +309,21 @@
                 android:foreground="@drawable/bg_player_control_focus"
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_pause" />
+
+            <ImageButton
+                android:id="@+id/btnForward10"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Forward 10s"
+                android:focusable="true"
+                android:clickable="true"
+                android:foreground="@drawable/bg_player_control_focus"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_forward_10"
+                android:tint="@color/white" />
 
             <ImageButton
                 android:id="@+id/btnNext"

@@ -982,6 +982,23 @@ class PlayerActivity : AppCompatActivity() {
         btnRotate.setOnClickListener { toggleScreenOrientation() }
         btnNext.setOnClickListener { playNext() }
         btnPrevious.setOnClickListener { playPrevious() }
+        binding.btnRewind10.setOnClickListener {
+            engine?.let { player ->
+                val pos = (player.positionMs - 10000).coerceAtLeast(0)
+                player.seekTo(pos)
+                handler.removeCallbacks(hideControlsRunnable)
+                scheduleHideControls()
+            }
+        }
+        binding.btnForward10.setOnClickListener {
+            engine?.let { player ->
+                val duration = player.durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE
+                val pos = (player.positionMs + 10000).coerceAtMost(duration)
+                player.seekTo(pos)
+                handler.removeCallbacks(hideControlsRunnable)
+                scheduleHideControls()
+            }
+        }
 
         // promt1 rework — the on-screen lock button is pointless with a D-pad remote, so hide it on TV.
         if (isTv) {
