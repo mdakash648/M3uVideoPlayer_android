@@ -195,6 +195,11 @@
     <string name="player_resume_continue">Continue</string>
     <string name="player_resume_start_over">Start over</string>
 
+    <!-- Player favorite button -->
+    <string name="player_favorite">Favorite</string>
+    <string name="player_added_to_favorites">Added to Favorites</string>
+    <string name="player_removed_from_favorites">Removed from Favorites</string>
+
     <!-- Settings â–¸ Playlists screen -->
     <string name="title_manage_playlists">Playlists</string>
 

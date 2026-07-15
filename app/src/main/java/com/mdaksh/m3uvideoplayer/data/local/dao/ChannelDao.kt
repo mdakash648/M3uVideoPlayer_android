@@ -54,4 +54,12 @@ interface ChannelDao {
     @Query("SELECT contentType FROM channels WHERE playlistId = :playlistId AND url = :url LIMIT 1")
     suspend fun getContentTypeByUrl(playlistId: Long, url: String): String?
 
+    /** Player Favorite — check if a channel is favorited, looked up by (playlistId, url). */
+    @Query("SELECT isFavorite FROM channels WHERE playlistId = :playlistId AND url = :url LIMIT 1")
+    suspend fun isFavoriteByUrl(playlistId: Long, url: String): Boolean?
+
+    /** Player Favorite — toggle the isFavorite flag for a channel identified by (playlistId, url). */
+    @Query("UPDATE channels SET isFavorite = :favorite WHERE playlistId = :playlistId AND url = :url")
+    suspend fun setFavoriteByUrl(playlistId: Long, url: String, favorite: Boolean)
+
 }

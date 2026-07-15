@@ -31,6 +31,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.mdaksh.m3uvideoplayer.R
+import com.mdaksh.m3uvideoplayer.data.local.dao.ChannelDao
 import com.mdaksh.m3uvideoplayer.data.local.dao.ResumeDao
 import com.mdaksh.m3uvideoplayer.data.local.entity.ResumePointEntity
 import com.mdaksh.m3uvideoplayer.databinding.ActivityPlayerBinding
@@ -106,6 +107,10 @@ class PlayerActivity : AppCompatActivity() {
     /** promt4 — persistent resume-point store (save/read per-video playback position). */
     @Inject
     lateinit var resumeDao: ResumeDao
+
+    /** Player Favorite — ChannelDao for toggling favourite status from the player. */
+    @Inject
+    lateinit var channelDao: ChannelDao
 
     /**
      * Floating Resume Button engine — writes the single active `playlist_resume_points` pointer.
@@ -275,6 +280,9 @@ class PlayerActivity : AppCompatActivity() {
      * does nothing. This timestamp lets [handleCenterKey] ignore the duplicate ACTION_UP.
      */
     private var lastCenterKeyUpTime = 0L
+
+    /** Player Favorite — tracks whether the currently playing channel is a favorite. */
+    private var currentChannelFavorite = false
 
     /** Step 10.4 — while true, all touch + key input is swallowed except unlocking. */
     private var locked = false
@@ -502,7 +510,7 @@ class PlayerActivity : AppCompatActivity() {
         // promt5 — a forced-resume launch (from the floating resume FAB) skips the DB check and the
         // Continue/Start-Over prompt entirely: it plays straight from the caller-supplied offset.
         val forcedResumeMs = intent.getLongExtra(EXTRA_RESUME_POSITION_MS, -1L)
-        if (forcedResumeMs > 0L) {
+        if (forcedResumeMs >= 0L) {
             resumeChecked = true
             play(url, forcedResumeMs)
             return
@@ -517,6 +525,15 @@ class PlayerActivity : AppCompatActivity() {
         val playlistId = currentQueueItem?.playlistId ?: 0L
         resumeScope.launch {
             val saved = runCatching { resumeDao.getResumePoint(playlistId, url) }.getOrNull()
+            // Double-check: if the saved resume point itself was recorded as Live, or has no
+            // duration, skip the prompt — the M3U parser may have mislabelled the channel.
+            if (saved != null && (saved.isLive || saved.durationMs <= 0L)) {
+                withContext(Dispatchers.Main) {
+                    resumeChecked = true
+                    if (!isFinishing && !isDestroyed) play(url, 0L)
+                }
+                return@launch
+            }
             val resumeMs = saved?.takeIf { isResumable(it) }?.positionMs ?: 0L
             withContext(Dispatchers.Main) {
                 resumeChecked = true
@@ -976,6 +993,10 @@ class PlayerActivity : AppCompatActivity() {
         btnAudioTrack.setOnClickListener { showTrackDialog(audio = true) }
         btnSubtitles.setOnClickListener { showTrackDialog(audio = false) }
         btnPip.setOnClickListener { enterPipMode() }
+
+        // Player Favorite — toggle the channel's favorite flag and update the heart icon.
+        btnFavorite.setOnClickListener { toggleFavorite() }
+        loadFavoriteState()
         if (!supportsPip()) btnPip.visibility = View.GONE
 
         // [FEATURE UPDATE] Screen rotate + filter-aware, looping Next/Previous.
@@ -983,6 +1004,7 @@ class PlayerActivity : AppCompatActivity() {
         btnNext.setOnClickListener { playNext() }
         btnPrevious.setOnClickListener { playPrevious() }
         binding.btnRewind10.setOnClickListener {
+            if (blockIfLiveSeek()) return@setOnClickListener
             engine?.let { player ->
                 val pos = (player.positionMs - 10000).coerceAtLeast(0)
                 player.seekTo(pos)
@@ -991,6 +1013,7 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
         binding.btnForward10.setOnClickListener {
+            if (blockIfLiveSeek()) return@setOnClickListener
             engine?.let { player ->
                 val duration = player.durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE
                 val pos = (player.positionMs + 10000).coerceAtMost(duration)
@@ -1062,6 +1085,50 @@ class PlayerActivity : AppCompatActivity() {
                 false
             }
         }
+    }
+
+    // --- Player Favorite -----------------------------------------------------------------------
+
+    /**
+     * Reads the current channel's favorite state from the database and updates the heart icon.
+     * Called once in [setupControls] for the initial channel, and again whenever the user
+     * navigates to a different channel via Next/Previous.
+     */
+    private fun loadFavoriteState() {
+        val item = currentQueueItem ?: return
+        val url = item.url.takeIf { it.isNotBlank() } ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val isFav = channelDao.isFavoriteByUrl(item.playlistId, url) ?: false
+            withContext(Dispatchers.Main) {
+                currentChannelFavorite = isFav
+                updateFavoriteIcon()
+            }
+        }
+    }
+
+    /**
+     * Toggles the current channel's [isFavorite] flag in the database and updates the icon.
+     * Works for any content type — Live TV, Movie, or Series.
+     */
+    private fun toggleFavorite() {
+        val item = currentQueueItem ?: return
+        val url = item.url.takeIf { it.isNotBlank() } ?: return
+        val newState = !currentChannelFavorite
+        currentChannelFavorite = newState
+        updateFavoriteIcon()
+        val message = if (newState) R.string.player_added_to_favorites else R.string.player_removed_from_favorites
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch(Dispatchers.IO) {
+            channelDao.setFavoriteByUrl(item.playlistId, url, newState)
+        }
+    }
+
+    /** Swaps the heart icon between filled (favorite) and outline (not favorite). */
+    private fun updateFavoriteIcon() {
+        binding.btnFavorite.setImageResource(
+            if (currentChannelFavorite) R.drawable.ic_favorite_filled
+            else R.drawable.ic_favorite_border
+        )
     }
 
     private fun togglePlayPause() {
@@ -1201,6 +1268,8 @@ class PlayerActivity : AppCompatActivity() {
         binding.textDuration.text = formatTime(0L)
         // promt2 — regenerate the quality ladder for the newly selected item before it loads.
         prepareQualityVariants()
+        // Player Favorite — refresh the heart icon for the newly selected channel.
+        loadFavoriteState()
         play(item.url)
         scheduleHideControls()
     }

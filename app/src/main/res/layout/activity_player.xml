@@ -255,6 +255,12 @@
                 style="@style/Player.ControlButton"
                 android:contentDescription="@string/player_pip"
                 android:src="@drawable/ic_pip" />
+
+            <ImageButton
+                android:id="@+id/btnFavorite"
+                style="@style/Player.ControlButton"
+                android:contentDescription="@string/player_favorite"
+                android:src="@drawable/ic_favorite_border" />
         </LinearLayout>
 
         <!-- Center transport: previous / play-pause / next. [FEATURE UPDATE] -->

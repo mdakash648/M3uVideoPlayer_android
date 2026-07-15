@@ -109,7 +109,7 @@ class GroupListFragment : Fragment() {
 
         binding.fabResume.setOnClickListener {
             val target = viewModel.resumeTarget.value ?: return@setOnClickListener
-            val resumePos = if (target.isLive) -1L else target.positionMs
+            val resumePos = if (target.isLive) 0L else target.positionMs
             // [FIX] Build the full folder queue so Next/Previous navigate within the same group.
             // buildResumeQueue() is a one-shot suspend call; launch on the lifecycle scope so it
             // is automatically cancelled if the fragment is destroyed before it completes.
