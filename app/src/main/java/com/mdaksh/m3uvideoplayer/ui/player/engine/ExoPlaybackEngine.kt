@@ -14,6 +14,7 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -97,11 +98,12 @@ class ExoPlaybackEngine(
             referrer?.let { put("Referer", it) }
             userAgent?.let { put("User-Agent", it) }
         }
-        val factory = dataSourceFactory.also {
-            // OkHttpDataSource.Factory carries default headers; set them when present.
-            if (headers.isNotEmpty() && it is androidx.media3.datasource.okhttp.OkHttpDataSource.Factory) {
-                it.setDefaultRequestProperties(headers)
+        val factory = if (headers.isNotEmpty()) {
+            ResolvingDataSource.Factory(dataSourceFactory) { dataSpec ->
+                dataSpec.withAdditionalHeaders(headers)
             }
+        } else {
+            dataSourceFactory
         }
         return DefaultMediaSourceFactory(factory)
     }
